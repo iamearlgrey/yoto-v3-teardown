@@ -4,9 +4,9 @@ Teardown notes for the full-size Yoto Player 3rd generation, plus a small Arduin
 
 **The key finding:** the V3 uses two AW88194 smart amps at I2C 0x34 and 0x37. They stay in reset, and invisible to an I2C scan, until IO expander pin IOX.2.4 goes high. Stock firmware does that at boot. Custom firmware has to do it too.
 
-[**Video**]{(https://github.com/user-attachments/assets/d955e8e3-7148-4fcc-8168-46cc7206af2c)
+[**Video**](https://github.com/user-attachments/assets/d955e8e3-7148-4fcc-8168-46cc7206af2c)
 
-Check out [Google](https://google.com).
+Check out [**VIDEO**](https://github.com/user-attachments/assets/d955e8e3-7148-4fcc-8168-46cc7206af2c).
 
 
 ![Yoto Player V3 main board with chips and connectors labeled](photos/06-board-component-side.jpg)
