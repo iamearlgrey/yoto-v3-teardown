@@ -39,7 +39,7 @@ Amp registers are 16-bit, sent high byte first after an 8-bit register address. 
 
 ## Test results
 
-Run Nov 1, 2026, powered from USB-C with the original speakers attached. Volume −24 dB, 30% sine at 480 Hz, 48 kHz 16-bit, mono mix on both amps. The tone was clearly audible from both speakers.
+Run Nov 1, 2026, powered from USB-C with the original speakers attached and the battery unplugged. Volume −24 dB, 30% sine at 480 Hz, 48 kHz 16-bit, mono mix on both amps. The tone was clearly audible from both speakers.
 
 | Check | Result |
 | --- | --- |
@@ -49,7 +49,7 @@ Run Nov 1, 2026, powered from USB-C with the original speakers attached. Volume 
 | Status after amp on | 0x0311: locked, clocks stable, switching, boost started, undervoltage cleared |
 | After three beeps | Unchanged |
 
-The board reset with a brownout (`E BOD`) when USB-C was unplugged. That's expected: the sketch never sets up the charger or battery path. A boot message about an invalid core dump image is harmless, because the stock partition table has no core dump partition.
+The board reset with a brownout (`E BOD`) when USB-C was unplugged. That's expected with no battery attached. A boot message about an invalid core dump image is harmless, because the stock partition table has no core dump partition.
 
 ## Running the sketch
 
@@ -79,8 +79,11 @@ Adafruit's guide lists the AW88194 at 0x64. On this V3, 0x64 is the CW2215B batt
 
 - Which amp is really left and which is right. The plain V3 config has them swapped.
 - Running on battery alone.
-- What 0x62 and 0x65 are, and why 0x64 didn't answer in the amp-test scan.
-- Whether 0x75 is the AW2028H, and the p0–p3 port order across the two expanders.
+- What 0x62 and 0x75 are.
+- Whether 0x65 is the AW2028H night light driver. open-yoto's notes on the stock firmware point that way.
+- Whether 0x64 returns with the battery attached. The CW2215B gauge didn't answer in the amp-test scan, and the battery was unplugged.
+- What the third wire in each speaker harness does. The black wire stops inside the foam tape, and red and white continue to the speaker.
+- The p0–p3 port order across the two expanders.
 - Why IOX.0.0, a Qi interrupt, is set as an output.
 - Where the LIS2DH12 sits, and what's on the night light and Qi boards.
 
