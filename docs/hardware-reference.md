@@ -156,7 +156,7 @@ Everything inside uses plug-in cables, so the player comes apart and goes back t
 
 | Connector | Wires | Goes to | Source |
 | --- | --- | --- | --- |
-| Left and right speakers, bottom edge | 3 each: red, black, white | 8 Ω, 5 W speakers. Only red and black reach the speaker. White ends under foam tape, likely the thermistor on GPIO39 | [Board], thermistor [Inferred] |
+| Left and right speakers, bottom edge | 3 each: red, black, white | 8 Ω, 5 W speakers. Only red and white reach the speaker. Black ends under foam tape, likely the thermistor on GPIO39 | [Board], thermistor [Inferred] |
 | Battery, bottom right | 3 | A&S 21700 cell, 3.7 V, 4500 mAh. Third wire likely a thermistor | [Board], [Inferred] |
 | Encoders, top left and top right | 4 each | The two dials | [Board] |
 | NFC, left edge | 2 | NFC antenna board under the card slot | [Board] |
