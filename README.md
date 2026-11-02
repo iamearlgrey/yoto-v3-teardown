@@ -107,4 +107,4 @@ Independent project, not affiliated with or endorsed by Yoto. No Yoto firmware i
 
 Code is MIT ([`LICENSE`](LICENSE)). Docs and photos are CC BY 4.0 ([`LICENSE-docs.md`](LICENSE-docs.md)).
 
-By iamearlgrey (Zack(.
+By iamearlgrey (Zack).
