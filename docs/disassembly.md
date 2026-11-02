@@ -46,16 +46,17 @@ Push the cover downward, parallel to the board, to release it. Do not pull on th
 
 1. Press the knob's grooves through the slots while gently pulling out on the knob. The grooves snap into the enclosure.
 2. Watch for a small loose spacer inside the knob. I'm not sure if it's necessary, so keep it.
-3. Encoders must be fully removed in order to remove the panel covering the audio chamber (back panel).
 
 The encoders use a D shaft.
+
+The encoders must be fully removed in order to remove the panel covering the audio chamber (the back panel).
 
 ## Inside the enclosure
 
 ![NFC antenna, Qi charger, battery, speakers and antenna routing](../photos/08-inside-enclosure.jpg)
 
 - Two 8 Ω, 5 W speakers sit in a sound chamber with a rubber gasket around it.
-- Each speaker has a 3-wire lead, but only 2 wires connect to the speaker.
+- Each speaker has a 3-wire lead, but only red and white connect to the speaker. Black stops inside the foam tape.
 - A panel hooks around the Wi-Fi antenna.
 - The battery sits behind a door.
 - The Qi charger and NFC antenna are also inside. The NFC antenna sits under the card slot.

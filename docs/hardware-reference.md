@@ -51,9 +51,9 @@ SDA GPIO21, SCL GPIO25. [Config]
 | 0x37 | AW88194 | Speaker amp, right per config | Scan after wake-up, [Config] |
 | 0x51 | IT8563 / PCF8563-type | Real-time clock | Scan, [Config] |
 | 0x62 | Unknown | Appeared in the amp-test scan | Scan |
-| 0x64 | CW2215B | Battery fuel gauge | Earlier scan, [Config]. Did not answer in the amp-test scan |
-| 0x65 | Unknown | Appeared in the amp-test scan | Scan |
-| 0x75 | AW2028H | Night light LED driver | Scan, [Inferred] by elimination |
+| 0x64 | CW2215B | Battery fuel gauge | Earlier scan, [Config]. Did not answer in the amp-test scan, with the battery unplugged |
+| 0x65 | AW2028H, likely | Night light LED driver | Scan, [Inferred] from open-yoto's notes on the stock firmware |
+| 0x75 | Unknown | | Scan |
 
 Not on the bus: the Qi receiver (CV8013N, no I2C address in the config) and the NFC reader (UART).
 
@@ -85,7 +85,7 @@ From the V3-E config. Nearly every usable pin is taken.
 | 34 | IO expander interrupt, input only |
 | 35 | Qi receiver temperature sensor, ADC |
 | 36 | Ambient light sensor, ADC |
-| 39 | Temperature sensor, ADC. Likely the thermistor wire in the speaker harness [Inferred] |
+| 39 | Temperature sensor, ADC. Physical location unconfirmed |
 
 Test points [Board], shown in [this photo](../photos/09-programming-header-detail.jpg):
 
@@ -156,7 +156,7 @@ Everything inside uses plug-in cables, so the player comes apart and goes back t
 
 | Connector | Wires | Goes to | Source |
 | --- | --- | --- | --- |
-| Left and right speakers, bottom edge | 3 each: red, black, white | 8 Ω, 5 W speakers. Only red and white reach the speaker. Black ends under foam tape, likely the thermistor on GPIO39 | [Board], thermistor [Inferred] |
+| Left and right speakers, bottom edge | 3 each: red, black, white | 8 Ω, 5 W speakers. Red and white reach the speaker. Black stops inside the foam tape, purpose unknown, possibly a thermistor on GPIO39 | [Board], thermistor is a guess |
 | Battery, bottom right | 3 | A&S 21700 cell, 3.7 V, 4500 mAh. Third wire likely a thermistor | [Board], [Inferred] |
 | Encoders, top left and top right | 4 each | The two dials | [Board] |
 | NFC, left edge | 2 | NFC antenna board under the card slot | [Board] |
@@ -184,6 +184,6 @@ The V3-E config lists a different battery (EVE-LJDX90X-4900) than the fitted A&S
 | U100, silkscreen hidden | SGM41513 | SGM41513 | Battery charger | Part confirmed |
 | U300 | | microSD socket | Storage | Confirmed |
 | U302 | 4D5, with data matrix | Unknown | Likely the CW2215B battery gauge | Inferred |
-| Night light board | Not photographed | AW2028H, likely | Night light LED driver | Inferred |
+| Night light board | Not photographed | AW2028H, likely | Night light LED driver, likely 0x65 | Inferred |
 | Qi board | Not photographed | CV8013N, likely | Wireless charging receiver | Inferred |
 | Not yet found | | LIS2DH12 | Accelerometer | Unlocated |
