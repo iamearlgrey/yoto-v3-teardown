@@ -45,7 +45,7 @@ Push the cover downward, parallel to the board, to release it. Do not pull on th
 ![Removing the encoder knobs](../photos/07-knobs-and-encoders.jpg)
 
 1. Press the knob's grooves through the slots while gently pulling out on the knob. The grooves snap into the enclosure.
-2. Watch for a small loose spacer inside the knob. I'm not sure if it's necessary, so keep it.
+2. Watch for a small loose spacer inside the knob. I'm not sure if it's necessary, so keep it. Encoders must be fully removed in order to remove the panel covering the audio chamber (back panel).
 
 The encoders use a D shaft.
 
