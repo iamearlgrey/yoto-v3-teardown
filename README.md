@@ -6,6 +6,9 @@ Teardown notes for the full-size Yoto Player 3rd generation, plus a small Arduin
 
 [**Video**]{(https://github.com/user-attachments/assets/d955e8e3-7148-4fcc-8168-46cc7206af2c)
 
+Check out [Google](https://google.com).
+
+
 ![Yoto Player V3 main board with chips and connectors labeled](photos/06-board-component-side.jpg)
 
 ## What's here
