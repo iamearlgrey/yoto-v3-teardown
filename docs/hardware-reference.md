@@ -84,8 +84,8 @@ From the V3-E config. Nearly every usable pin is taken.
 | 32 / 33 | NFC reader UART RX / TX |
 | 34 | IO expander interrupt, input only |
 | 35 | Qi receiver temperature sensor, ADC |
-| 36 | Ambient light sensor, ADC |
-| 39 | Temperature sensor, ADC. Physical location unconfirmed |
+| 36 | Ambient light sensor D300, ADC. Connection confirmed by continuity [Board] |
+| 39 | Temperature sensor, ADC. Location unknown: not the speaker black wire or the battery's third wire [Board] |
 
 Test points [Board], shown in [this photo](../photos/09-programming-header-detail.jpg):
 
@@ -156,8 +156,8 @@ Everything inside uses plug-in cables, so the player comes apart and goes back t
 
 | Connector | Wires | Goes to | Source |
 | --- | --- | --- | --- |
-| Left and right speakers, bottom edge | 3 each: red, black, white | 8 Ω, 5 W speakers. Red and white reach the speaker. Black stops inside the foam tape, purpose unknown, possibly a thermistor on GPIO39 | [Board], thermistor is a guess |
-| Battery, bottom right | 3 | A&S 21700 cell, 3.7 V, 4500 mAh, with a small PCB on top. Third wire likely goes to that PCB, purpose unconfirmed | [Board], [Inferred] |
+| Left and right speakers, bottom edge | 3 each: red, black, white | 8 Ω, 5 W speakers. Red and white reach the speaker, reading 8.2 Ω and 6.7 Ω. Black stops inside the foam tape, reads open to red and white, and connects to ground on the board, so it's likely a shield | [Board], shield [Inferred] |
+| Battery, bottom right | 3 | A&S 21700 cell, 3.7 V, 4500 mAh, with a small PCB on top. Yellow is the third wire. It reads 11.36 kΩ to black at room temperature, which fits a 10 kΩ thermistor. It doesn't connect to GPIO39 or ground on the board | [Board], thermistor [Inferred] |
 | Encoders, top left and top right | 4 each | The two dials | [Board] |
 | NFC, left edge | 2 | NFC antenna board under the card slot | [Board] |
 | P201, bottom | 7 | Qi receiver at the base | [Board] |
@@ -183,7 +183,8 @@ The V3-E config lists a different battery (EVE-LJDX90X-4900) than the fitted A&S
 | U103 | HUSB238 | HUSB238 | USB-C power delivery | Confirmed |
 | U100, silkscreen hidden | SGM41513 | SGM41513 | Battery charger | Part confirmed |
 | U300 | | microSD socket | Storage | Confirmed |
-| U302 | 4D5, with data matrix | Unknown | Likely the CW2215B battery gauge | Inferred |
+| D300 | | Light sensor, part unidentified | Ambient light sensor on GPIO36, seen through an opening in the LED frame, with R307, R308 and C306 beside it | Confirmed by continuity |
+| U302 | 4D5, with data matrix | Unknown | Likely the CW2215B battery gauge. Pads are under the chip, so it can't be probed directly | Inferred |
 | Night light board | Not photographed | AW2028H, likely | Night light LED driver, likely 0x65 | Inferred |
 | Qi board | Not photographed | CV8013N, likely | Wireless charging receiver | Inferred |
 | Not yet found | | LIS2DH12 | Accelerometer | Unlocated |

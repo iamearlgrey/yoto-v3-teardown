@@ -86,7 +86,7 @@ Adafruit's guide lists the AW88194 at 0x64. On this V3, 0x64 is the CW2215B batt
 - What 0x62 and 0x75 are.
 - Whether 0x65 is the AW2028H night light driver. open-yoto's notes on the stock firmware point that way.
 - Whether 0x64 returns with the battery attached. The CW2215B gauge didn't answer in the amp-test scan, and the battery was unplugged.
-- What the third wire in each speaker harness does. The black wire stops inside the foam tape, and red and white continue to the speaker.
+- Where the GPIO39 temperature sensor is. It isn't the speaker harness black wire or the battery's third wire.
 - The p0–p3 port order across the two expanders.
 - Why IOX.0.0, a Qi interrupt, is set as an output.
 - Where the LIS2DH12 sits, and what's on the night light and Qi boards.
