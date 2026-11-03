@@ -77,19 +77,20 @@ Yoto's stock firmware loads DSP firmware and tuning into the amp, and this sketc
 
 ## Why 0x64 isn't the amp here
 
-Adafruit's guide lists the AW88194 at 0x64. On this V3, 0x64 is the CW2215B battery gauge, and the AW88194 datasheet only allows 0x34–0x37.
+Adafruit's guide lists the AW88194 at 0x64. Yoto's V3-E config puts a CW2215B battery gauge at that address, and the AW88194 datasheet only allows 0x34–0x37.
 
 ## Still unknown
 
 - Which amp is really left and which is right. The plain V3 config has them swapped.
 - Running on battery alone.
-- What 0x62 and 0x75 are.
+- What 0x75 is.
+- Which gauge address really answers. U105 looks like a CW2015, which uses 0x62, though Yoto's V3-E config says CW2215B at 0x64.
 - Whether 0x65 is the AW2028H night light driver. open-yoto's notes on the stock firmware point that way.
-- Whether 0x64 returns with the battery attached. The CW2215B gauge didn't answer in the amp-test scan, and the battery was unplugged.
+- Whether 0x64 answers with the battery attached. It didn't in the amp-test scan, with the battery unplugged.
 - Where the GPIO39 temperature sensor is. It isn't the speaker harness black wire or the battery's third wire.
 - The p0–p3 port order across the two expanders.
 - Why IOX.0.0, a Qi interrupt, is set as an output.
-- Where the CW2215B battery gauge sits, and what's on the night light and Qi boards.
+- What's on the night light and Qi boards.
 
 If you have a V3 and can answer any of these, please open an issue. Results from other V3 boards are especially useful, since I've only seen one.
 

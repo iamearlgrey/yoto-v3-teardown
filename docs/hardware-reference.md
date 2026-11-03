@@ -50,8 +50,8 @@ SDA GPIO21, SCL GPIO25. [Config]
 | 0x34 | AW88194 | Speaker amp, left per config | Scan after wake-up, [Config] |
 | 0x37 | AW88194 | Speaker amp, right per config | Scan after wake-up, [Config] |
 | 0x51 | IT8563 / PCF8563-type | Real-time clock | Scan, [Config] |
-| 0x62 | Unknown | Appeared in the amp-test scan | Scan |
-| 0x64 | CW2215B | Battery fuel gauge | Earlier scan, [Config]. Did not answer in the amp-test scan, with the battery unplugged |
+| 0x62 | CW2015, very likely (U105) | Battery fuel gauge | Scan, [Board], [Inferred] from the chip marking and CW2015's usual address |
+| 0x64 | CW2215B per V3-E config, but see note | Battery fuel gauge | Earlier scan, [Config]. Did not answer in the amp-test scan. U105 suggests a CW2015 is fitted instead |
 | 0x65 | AW2028H, likely | Night light LED driver | Scan, [Inferred] from open-yoto's notes on the stock firmware |
 | 0x75 | Unknown | | Scan |
 
@@ -164,7 +164,7 @@ Everything inside uses plug-in cables, so the player comes apart and goes back t
 | P303, bottom | 6 | Night-light LEDs around the rear edge | [Board] |
 | ESP32 antenna socket | Coax | External Wi-Fi antenna cable, routed under a panel hook | [Board] |
 
-The V3-E config lists a different battery (EVE-LJDX90X-4900) than the fitted A&S cell, which is the plain V3 entry's part. The rest of the board still matches V3-E, so this is likely a second battery supplier. [Inferred]
+The V3-E config lists a different battery (EVE-LJDX90X-4900) than the fitted A&S cell, which is the plain V3 entry's part. U105 is also the plain V3 entry's gauge type, so this board may mix parts from both entries. Everything tested from the V3-E entry has worked so far, including the amps, expanders and I2S pins. [Inferred]
 
 ## Chips
 
@@ -187,4 +187,5 @@ The V3-E config lists a different battery (EVE-LJDX90X-4900) than the fitted A&S
 | U302 | 4D5, with data matrix | LIS2DH12, very likely | Accelerometer (0x18), next to TP40. About 2 mm square, package matches the datasheet, pin 1 connects to SCL | Very likely |
 | Night light board | Not photographed | AW2028H, likely | Night light LED driver, likely 0x65 | Inferred |
 | Qi board | Not photographed | CV8013N, likely | Wireless charging receiver | Inferred |
-| Not yet found | | CW2215B | Battery fuel gauge (0x64). Listed by JLCPCB as WLCSP-9 | Unlocated |
+| U105 | 2015CH BDLR23 | CW2015CHBD, very likely | Battery fuel gauge, on the opposite side of the board near the battery connector | Very likely |
+| U105A | Empty | Not fitted | 3×3 pad grid beside U105. Fits a WLCSP-9, the package listed for the CW2215B, so likely an alternate gauge footprint | Inferred |
