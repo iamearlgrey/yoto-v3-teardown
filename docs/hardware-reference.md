@@ -43,7 +43,7 @@ SDA GPIO21, SCL GPIO25. [Config]
 | --- | --- | --- | --- |
 | 0x08 | HUSB238 | USB-C power delivery | Scan, [Config] |
 | 0x09 | ES8156 | Headphone DAC | Scan, [Config] |
-| 0x18 | LIS2DH12 | Accelerometer | Scan, [Inferred] from the chip's usual address |
+| 0x18 | LIS2DH12 | Accelerometer, likely U302 | Scan, [Board], [Inferred] from the chip's usual address |
 | 0x1A | SGM41513 | Battery charger | Scan, [Config] |
 | 0x20 | PI4IOE5V6416 | IO expander, ports p0–p1 | Scan, [Board], [Config] |
 | 0x21 | PI4IOE5V6416 | IO expander, ports p2–p3 | Scan, [Board], [Config] |
@@ -184,7 +184,7 @@ The V3-E config lists a different battery (EVE-LJDX90X-4900) than the fitted A&S
 | U100, silkscreen hidden | SGM41513 | SGM41513 | Battery charger | Part confirmed |
 | U300 | | microSD socket | Storage | Confirmed |
 | D300 | | Light sensor, part unidentified | Ambient light sensor on GPIO36, seen through an opening in the LED frame, with R307, R308 and C306 beside it | Confirmed by continuity |
-| U302 | 4D5, with data matrix | Unknown | Likely the CW2215B battery gauge. Pads are under the chip, so it can't be probed directly | Inferred |
+| U302 | 4D5, with data matrix | LIS2DH12, very likely | Accelerometer (0x18), next to TP40. About 2 mm square, package matches the datasheet, pin 1 connects to SCL | Very likely |
 | Night light board | Not photographed | AW2028H, likely | Night light LED driver, likely 0x65 | Inferred |
 | Qi board | Not photographed | CV8013N, likely | Wireless charging receiver | Inferred |
-| Not yet found | | LIS2DH12 | Accelerometer | Unlocated |
+| Not yet found | | CW2215B | Battery fuel gauge (0x64). Listed by JLCPCB as WLCSP-9 | Unlocated |

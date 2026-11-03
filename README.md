@@ -89,7 +89,7 @@ Adafruit's guide lists the AW88194 at 0x64. On this V3, 0x64 is the CW2215B batt
 - Where the GPIO39 temperature sensor is. It isn't the speaker harness black wire or the battery's third wire.
 - The p0–p3 port order across the two expanders.
 - Why IOX.0.0, a Qi interrupt, is set as an output.
-- Where the LIS2DH12 sits, and what's on the night light and Qi boards.
+- Where the CW2215B battery gauge sits, and what's on the night light and Qi boards.
 
 If you have a V3 and can answer any of these, please open an issue. Results from other V3 boards are especially useful, since I've only seen one.
 
