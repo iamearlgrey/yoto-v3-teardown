@@ -9,6 +9,8 @@ Everything inside connects by plug-in cables, so no soldering is needed to open 
 1. Use a spudger to gently pry the diffuser screen on its inside edge.
 2. Work slowly around the frame until the entire screen comes loose.
 
+Notches around the LED channel frame hold the screen's clips, and one opening near the SD card reader is the window for the ambient light sensor. Photo 2 in the Board section marks them.
+
 ## Board
 
 ![The eight screws, and the board partly separated from the enclosure](../photos/02-screws-and-board.jpg)

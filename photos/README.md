@@ -14,4 +14,4 @@ All photos and annotations by Zack, CC BY 4.0.
 | `08-inside-enclosure.jpg` | NFC antenna, Qi charger, battery, speakers, antenna routing |
 | `09-programming-header-detail.jpg` | Header P200 and test points |
 
-The code label on the SD slot and the data matrix on the ESP32 module are covered on purpose, since they may identify the individual unit.
+The code label on the SD slot and the data matrix codes on the ESP32 module and U302 are covered on purpose, since they may identify the individual unit.
