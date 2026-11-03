@@ -52,7 +52,7 @@ SDA GPIO21, SCL GPIO25. [Config]
 | 0x51 | IT8563 / PCF8563-type | Real-time clock | Scan, [Config] |
 | 0x62 | CW2015, very likely (U105) | Battery fuel gauge | Scan, [Board], [Inferred] from the chip marking and CW2015's usual address |
 | 0x64 | CW2215B per V3-E config, but see note | Battery fuel gauge | Earlier scan, [Config]. Did not answer in the amp-test scan. U105 suggests a CW2015 is fitted instead |
-| 0x65 | AW2028H, likely | Night light LED driver | Scan, [Inferred] from open-yoto's notes on the stock firmware |
+| 0x65 | AW2028H, very likely (U301) | Night light LED driver | Scan, [Board], Awinic lists its address as 65H |
 | 0x75 | Unknown | | Scan |
 
 Not on the bus: the Qi receiver (CV8013N, no I2C address in the config) and the NFC reader (UART).
@@ -185,7 +185,8 @@ The V3-E config lists a different battery (EVE-LJDX90X-4900) than the fitted A&S
 | U300 | | microSD socket | Storage | Confirmed |
 | D300 | | Light sensor, part unidentified | Ambient light sensor on GPIO36, seen through an opening in the LED frame, with R307, R308 and C306 beside it | Confirmed by continuity |
 | U302 | 4D5, with data matrix | LIS2DH12, very likely | Accelerometer (0x18), next to TP40. About 2 mm square, package matches the datasheet, pin 1 connects to SCL | Very likely |
-| Night light board | Not photographed | AW2028H, likely | Night light LED driver, likely 0x65 | Inferred |
-| Qi board | Not photographed | CV8013N, likely | Wireless charging receiver | Inferred |
+| U301 | 28H DB | AW2028H, very likely | Night light LED driver (0x65), on the main board below the 6-pin connector. 8 pins: 3 on two sides, 1 on the others | Very likely |
+| Night light board | Not removed | Glued in place | Rear LEDs. The driver is on the main board | Observed |
+| Qi board | Not removed, glued in place | CV8013N, likely | Wireless charging receiver | Inferred |
 | U105 | 2015CH BDLR23 | CW2015CHBD, very likely | Battery fuel gauge, on the opposite side of the board near the battery connector | Very likely |
 | U105A | Empty | Not fitted | 3×3 pad grid beside U105. Fits a WLCSP-9, the package listed for the CW2215B, so likely an alternate gauge footprint | Inferred |

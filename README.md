@@ -85,12 +85,11 @@ Adafruit's guide lists the AW88194 at 0x64. Yoto's V3-E config puts a CW2215B ba
 - Running on battery alone.
 - What 0x75 is.
 - Which gauge address really answers. U105 looks like a CW2015, which uses 0x62, though Yoto's V3-E config says CW2215B at 0x64.
-- Whether 0x65 is the AW2028H night light driver. open-yoto's notes on the stock firmware point that way.
 - Whether 0x64 answers with the battery attached. It didn't in the amp-test scan, with the battery unplugged.
 - Where the GPIO39 temperature sensor is. It isn't the speaker harness black wire or the battery's third wire.
 - The p0–p3 port order across the two expanders.
 - Why IOX.0.0, a Qi interrupt, is set as an output.
-- What's on the night light and Qi boards.
+- What's on the Qi board. It and the night light board are glued in, so I left them in place.
 
 If you have a V3 and can answer any of these, please open an issue. Results from other V3 boards are especially useful, since I've only seen one.
 

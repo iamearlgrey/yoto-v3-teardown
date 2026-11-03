@@ -1,6 +1,6 @@
 # Taking apart a Yoto Player V3
 
-Everything inside connects by plug-in cables, so no soldering is needed to open it. Go slowly: the connectors are tight, and pulling on wires is the easy way to break something. (Further teardown showing the QI charger and Nightlight to come.)
+Everything inside connects by plug-in cables, so no soldering is needed to open it. Go slowly: the connectors are tight, and pulling on wires is the easy way to break something. The Qi charger and night light boards are glued in, so I left them in place.
 
 ## Diffuser screen
 
