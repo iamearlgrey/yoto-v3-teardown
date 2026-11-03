@@ -186,7 +186,7 @@ The V3-E config lists a different battery (EVE-LJDX90X-4900) than the fitted A&S
 | D300 | | Light sensor, part unidentified | Ambient light sensor on GPIO36, seen through an opening in the LED frame, with R307, R308 and C306 beside it | Confirmed by continuity |
 | U302 | 4D5, with data matrix | LIS2DH12, very likely | Accelerometer (0x18), next to TP40. About 2 mm square, package matches the datasheet, pin 1 connects to SCL | Very likely |
 | U301 | 28H DB | AW2028H, very likely | Night light LED driver (0x65), on the main board below the 6-pin connector. 8 pins: 3 on two sides, 1 on the others | Very likely |
-| Night light board | Not removed | Glued in place | Rear LEDs. The driver is on the main board | Observed |
-| Qi board | Not removed, glued in place | CV8013N, likely | Wireless charging receiver | Inferred |
+| Night light strip | Not removed | Glued in place | Rear LED strip around the back of the sound module. The driver is on the main board | Observed |
+| Qi board | Not removed, glued and screwed in place | CV8013N, likely | Wireless charging receiver on the bottom of the sound chamber, with a ring of magnets around the coil | Inferred |
 | U105 | 2015CH BDLR23 | CW2015CHBD, very likely | Battery fuel gauge, on the opposite side of the board near the battery connector | Very likely |
 | U105A | Empty | Not fitted | 3×3 pad grid beside U105. Fits a WLCSP-9, the package listed for the CW2215B, so likely an alternate gauge footprint | Inferred |

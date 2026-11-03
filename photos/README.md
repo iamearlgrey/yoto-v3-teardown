@@ -13,5 +13,7 @@ All photos and annotations by Zack, CC BY 4.0.
 | `07-knobs-and-encoders.jpg` | Removing the encoder knobs |
 | `08-inside-enclosure.jpg` | NFC antenna, Qi charger, battery, speakers, antenna routing |
 | `09-programming-header-detail.jpg` | Header P200 and test points |
+| `10-removing-sound-chamber.jpg` | Sound chamber screws and removal |
+| `11-qi-and-night-light.jpg` | Qi coil and night light strip in place |
 
-The code label on the SD slot and the data matrix codes on the ESP32 module and U302 are covered on purpose, since they may identify the individual unit.
+The code label on the SD slot and the data matrix codes on the ESP32 module and U302 are covered on purpose, since they may identify the individual unit. The product label on the base is blurred in photos 10 and 11 for the same reason.

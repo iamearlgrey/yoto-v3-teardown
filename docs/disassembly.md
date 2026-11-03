@@ -1,6 +1,6 @@
 # Taking apart a Yoto Player V3
 
-Everything inside connects by plug-in cables, so no soldering is needed to open it. Go slowly: the connectors are tight, and pulling on wires is the easy way to break something. The Qi charger and night light boards are glued in, so I left them in place.
+Everything inside connects by plug-in cables, so no soldering is needed to open it. Go slowly: the connectors are tight, and pulling on wires is the easy way to break something.
 
 ## Diffuser screen
 
@@ -62,3 +62,21 @@ The encoders must be fully removed in order to remove the panel covering the aud
 - A panel hooks around the Wi-Fi antenna.
 - The battery sits behind a door.
 - The Qi charger and NFC antenna are also inside. The NFC antenna sits under the card slot.
+
+## Removing the sound chamber
+
+![Removing the sound chamber from the outer housing](../photos/10-removing-sound-chamber.jpg)
+
+The whole sound chamber comes out as one unit, so the speakers and gaskets don't need to come out individually.
+
+1. Fully remove both encoders.
+2. Remove the four screws that hold the sound module to the outer housing. They sit in deep chambers, so use a magnetized bit.
+3. Lift the sound chamber out. Four other screws hold the outer back to the sound module, and those don't need to come out.
+
+## Qi charger and night light
+
+![Qi charger and night light LED strip on the sound chamber](../photos/11-qi-and-night-light.jpg)
+
+The Qi charger is glued and screwed to the bottom of the sound chamber. The night light LED strip is glued to the chamber around the back of the sound module. I couldn't remove either without breaking it, so I left them in place.
+
+The Qi charger's ring of magnets is strong enough to pull screws off a driver. Before closing the player, make sure no loose screws are left inside.
