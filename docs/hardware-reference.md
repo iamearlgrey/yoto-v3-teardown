@@ -180,7 +180,9 @@ The V3-E config lists a different battery (EVE-LJDX90X-4900) than the fitted A&S
 | U800 | ES8156 | ES8156 | Headphone DAC | Confirmed |
 | U803 | UM3208 | UM3208 | Level translator | Confirmed |
 | U900 | CR95HF | CR95HF | NFC reader | Confirmed |
+| U301, second use of this label | HY 27.120 | 27.12 MHz crystal, very likely | Metal can with four corner pads, beside U900. The silkscreen appears to reuse U301, which is also on the AW2028H | Very likely |
 | U103 | HUSB238 | HUSB238 | USB-C power delivery | Confirmed |
+| U101 | ASCM | Unidentified, likely a switching regulator | 6 pins, near the top of the board, beside L102 and U206. L102 isn't directly on the 3.3 V rail and has a diode-like path to the battery connector. Exact function unknown | Inferred |
 | U100, silkscreen hidden | SGM41513 | SGM41513 | Battery charger | Part confirmed |
 | U300 | | microSD socket | Storage | Confirmed |
 | D300 | | Light sensor, part unidentified | Ambient light sensor on GPIO36, seen through an opening in the LED frame, with R307, R308 and C306 beside it | Confirmed by continuity |
