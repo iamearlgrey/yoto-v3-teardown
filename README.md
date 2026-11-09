@@ -1,6 +1,6 @@
 # Yoto Player V3 teardown
 
-Teardown notes for the full-size Yoto Player 3rd generation, plus a small Arduino sketch that plays a tone through both original speakers. It's tested on real V3 hardware and uses the datasheet power-up sequence, with no Yoto firmware or DSP blobs.
+Teardown notes for the full-size Yoto Player 3rd generation, plus small Arduino sketches that play tones through both original speakers, now in true stereo, and read the board's battery and sensor chips. It's tested on real V3 hardware and uses the datasheet power-up sequence, with no Yoto firmware or DSP blobs.
 
 **The key finding:** the V3 uses two AW88194 smart amps at I2C 0x34 and 0x37. They stay in reset, and invisible to an I2C scan, until IO expander pin IOX.2.4 goes high. Stock firmware does that at boot. Custom firmware has to do it too.
 
@@ -16,6 +16,10 @@ Teardown notes for the full-size Yoto Player 3rd generation, plus a small Arduin
 | Path | What it is |
 | --- | --- |
 | [`firmware/yoto_v3_amp_test/`](firmware/yoto_v3_amp_test/) | Arduino sketch that wakes both amps and beeps |
+| [`firmware/yoto_v3_stereo/`](firmware/yoto_v3_stereo/) | True stereo: each amp plays its own channel, with a left-to-right sweep |
+| [`firmware/yoto_v3_left_right/`](firmware/yoto_v3_left_right/) | Beeps each amp alone, to tell left from right |
+| [`firmware/yoto_v3_bus_survey/`](firmware/yoto_v3_bus_survey/) | Read-only I2C survey: gauge, accelerometer, register dumps, light sensor and GPIO39 |
+| [`firmware/yoto_v3_battery_watch/`](firmware/yoto_v3_battery_watch/) | Wakes the fuel gauge and prints battery voltage and charger status |
 | [`docs/disassembly.md`](docs/disassembly.md) | Opening the player without breaking it |
 | [`docs/download-mode.md`](docs/download-mode.md) | Wiring, download mode, backup and restore |
 | [`docs/hardware-reference.md`](docs/hardware-reference.md) | I2C, GPIO, IO expander, flash, connector and chip maps |
@@ -32,7 +36,7 @@ Teardown notes for the full-size Yoto Player 3rd generation, plus a small Arduin
 
 2. Wait at least 5 ms. 0x34 and 0x37 should now answer a scan. Register 0x00 on each reads 0x1806.
 3. Start I2S: BCLK GPIO5, LRCLK GPIO18, data GPIO19, MCLK GPIO0. Keep clocks running at least 5 ms, since the amp's PLL locks to BCLK by default.
-4. Write 0x05 (I2SCTRL). `0x0C08` gives mono (L+R)/2, standard I2S, 16-bit, BCLK 32fs, 48 kHz.
+4. Write 0x05 (I2SCTRL). `0x0C08` gives mono (L+R)/2, standard I2S, 16-bit, BCLK 32fs, 48 kHz. For stereo, write `0x0408` (left channel) to 0x34 and `0x0808` (right channel) to 0x37. Channel select is bits 11:10: 1 left, 2 right, 3 mono mix.
 5. In 0x04 (SYSCTRL), set I2SEN (bit 6) and clear PWDN (bit 0), keeping AMPPD (bit 1) set. Poll 0x01 until bit 0 (PLL locked) is 1.
 6. In 0x04, clear AMPPD. Poll 0x01 until bit 8 (switching) is 1.
 7. In 0x08 (PWMCTRL), clear HMUTE (bit 0). Hardware mute is on by default.
@@ -54,6 +58,22 @@ Run Nov 1, 2026, powered from USB-C with the original speakers attached and the 
 | After three beeps | Unchanged |
 
 The board reset with a brownout (`E BOD`) when USB-C was unplugged. That's expected with no battery attached. A boot message about an invalid core dump image is harmless, because the stock partition table has no core dump partition.
+
+### Nov 9, 2026
+
+| Test | Result |
+| --- | --- |
+| Left/right (each amp alone) | 0x34 plays the left speaker, 0x37 the right, as you face the front |
+| Stereo (each amp on its own channel) | Left-only, right-only and split tones all came from the correct speakers, and the left-to-right sweep was smooth. The ESP32's first I2S slot is left |
+| Battery attached | Runs on battery alone. Same scan minus 0x08 (USB-C chip). 0x64 never answers |
+| Fuel gauge | CW2015 at 0x62, asleep until woken. Battery read 3.57 V |
+| Charger | SGM41513 at 0x1A charges the battery from USB-C at 500 mA |
+| Accelerometer | LIS2DH12 at 0x18 confirmed (WHO_AM_I 0x33) |
+| Light sensor | GPIO36 swings with light |
+
+The first stereo version stuttered during the sweep: computing double-precision sine and cosine for every sample was too slow at 48 kHz. A sine lookup table and per-chunk pan gains fixed it. Keep per-sample audio maths simple on the ESP32.
+
+Details in [`docs/hardware-reference.md`](docs/hardware-reference.md).
 
 ## Running the sketch
 
@@ -77,16 +97,13 @@ Yoto's stock firmware loads DSP firmware and tuning into the amp, and this sketc
 
 ## Why 0x64 isn't the amp here
 
-Adafruit's guide lists the AW88194 at 0x64. Yoto's V3-E config puts a CW2215B battery gauge at that address, and the AW88194 datasheet only allows 0x34–0x37.
+Adafruit's guide lists the AW88194 at 0x64. Yoto's V3-E config puts a CW2215B battery gauge at that address, and the AW88194 datasheet only allows 0x34–0x37. On this board nothing answers at 0x64 at all: the gauge fitted is a CW2015 at 0x62.
 
 ## Still unknown
 
-- Which amp is really left and which is right. The plain V3 config has them swapped.
-- Running on battery alone.
 - What 0x75 is.
-- Which gauge address really answers. U105 looks like a CW2015, which uses 0x62, though Yoto's V3-E config says CW2215B at 0x64.
-- Whether 0x64 answers with the battery attached. It didn't in the amp-test scan, with the battery unplugged.
-- Where the GPIO39 temperature sensor is. It isn't the speaker harness black wire or the battery's third wire.
+- Where the GPIO39 temperature sensor is. It isn't the speaker harness black wire or the battery's third wire, and it reads at the top of the ADC range, so it may need enabling.
+- How stock firmware raises the charger's 500 mA input limit.
 - The p0–p3 port order across the two expanders.
 - Why IOX.0.0, a Qi interrupt, is set as an output.
 - What's on the Qi board. It and the night light board are glued in, so I left them in place.

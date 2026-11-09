@@ -6,7 +6,7 @@ Source tags:
 
 - **[Board]** seen, measured, or read on this V3
 - **[Config]** from the V3-E board config in the stock firmware
-- **[Datasheet]** from the Awinic AW88194/AW88194A datasheets
+- **[Datasheet]** from the Awinic AW88194/AW88194A and SGMicro SGM41513 datasheets
 - **[Inferred]** reasoned from the above, not directly confirmed
 
 ![Main board, component side](../photos/06-board-component-side.jpg)
@@ -23,7 +23,9 @@ Source tags:
 | MCU | ESP32-WROVER-E N8R8 (8 MB flash, 8 MB PSRAM), wafer revision 3.1 | [Board] |
 | Matching firmware config | V3-E | [Config] |
 
-**V3-E, not V3.** The firmware holds configs for several similarly named models. The V3-E entry is the one whose parts match this board: PI4IOE5V6416 expanders (V3 lists ET6416), an SGM41513 charger at 0x1A (V3 lists SGM41511), and a battery gauge at 0x64. Other entries describe single-amp models and an older player with an ES8388 codec at 0x10. GPIO assignments differ between entries, so read only from V3-E.
+**V3-E, not V3.** The firmware holds configs for several similarly named models. The V3-E entry is the one whose parts match this board: PI4IOE5V6416 expanders (V3 lists ET6416), an SGM41513 charger at 0x1A (V3 lists SGM41511), and the pins and amp addresses. Other entries describe single-amp models and an older player with an ES8388 codec at 0x10. GPIO assignments differ between entries, so read only from V3-E.
+
+**One exception: the battery gauge.** V3-E lists a CW2215B at 0x64, but this board has a CW2015 at 0x62 and nothing at 0x64, which is the plain V3 entry's gauge. The fitted battery is also the plain V3 entry's part. So the board mixes the two entries. [Board]
 
 ## Security fuses
 
@@ -43,19 +45,36 @@ SDA GPIO21, SCL GPIO25. [Config]
 | --- | --- | --- | --- |
 | 0x08 | HUSB238 | USB-C power delivery | Scan, [Config] |
 | 0x09 | ES8156 | Headphone DAC | Scan, [Config] |
-| 0x18 | LIS2DH12 | Accelerometer, likely U302 | Scan, [Board], [Inferred] from the chip's usual address |
-| 0x1A | SGM41513 | Battery charger | Scan, [Config] |
+| 0x18 | LIS2DH12 (U302) | Accelerometer | Scan, [Board]. WHO_AM_I (register 0x0F) reads 0x33 |
+| 0x1A | SGM41513 (U100) | Battery charger | Scan, [Config], [Board]. Part ID register 0x0B reads 0x00, which is the plain SGM41513 |
 | 0x20 | PI4IOE5V6416 | IO expander, ports p0–p1 | Scan, [Board], [Config] |
 | 0x21 | PI4IOE5V6416 | IO expander, ports p2–p3 | Scan, [Board], [Config] |
-| 0x34 | AW88194 | Speaker amp, left per config | Scan after wake-up, [Config] |
-| 0x37 | AW88194 | Speaker amp, right per config | Scan after wake-up, [Config] |
-| 0x51 | IT8563 / PCF8563-type | Real-time clock | Scan, [Config] |
-| 0x62 | CW2015, very likely (U105) | Battery fuel gauge | Scan, [Board], [Inferred] from the chip marking and CW2015's usual address |
-| 0x64 | CW2215B per V3-E config, but see note | Battery fuel gauge | Earlier scan, [Config]. Did not answer in the amp-test scan. U105 suggests a CW2015 is fitted instead |
-| 0x65 | AW2028H, very likely (U301) | Night light LED driver | Scan, [Board], Awinic lists its address as 65H |
-| 0x75 | Unknown | | Scan |
+| 0x34 | AW88194 | Speaker amp, **left** | Scan after wake-up, [Config], confirmed by ear [Board] |
+| 0x37 | AW88194 | Speaker amp, **right** | Scan after wake-up, [Config], confirmed by ear [Board] |
+| 0x51 | IT8563 / PCF8563-type | Real-time clock | Scan, [Config], [Board]. Seconds register counts. No backup cell: the "lost power" flag is set and the time resets at every power-up |
+| 0x62 | CW2015 (U105) | Battery fuel gauge | Scan, [Board]. Asleep at power-up (mode register 0x0A = 0xC0). Writing 0x00 to 0x0A wakes it, and the cell voltage then reads correctly |
+| 0x64 | Nothing | | Never answered, on USB-C or battery. The V3-E config's CW2215B isn't fitted |
+| 0x65 | AW2028H, very likely (U301) | Night light LED driver | Scan, [Board], Awinic lists its address as 65H. Register 0x00 reads 0xB1 |
+| 0x75 | Unknown | | Scan. About nine registers (0x09 onward read 0xFF), static, same on USB-C and battery |
+
+0x08 answers only when USB-C is plugged in, since the HUSB238 is powered from the cable. Everything else answers on battery alone. [Board]
 
 Not on the bus: the Qi receiver (CV8013N, no I2C address in the config) and the NFC reader (UART).
+
+## Charger and battery
+
+From the SGM41513 datasheet and status registers read on this board. [Board], [Datasheet]
+
+| Condition | Charger status (0x1A, registers 0x08 and 0x09) |
+| --- | --- |
+| USB-C only, battery unplugged | USB host input, 500 mA limit, input good. Thermistor input reads "cold" |
+| Battery only | No input. Thermistor normal |
+| Battery and USB-C | Fast charging. Thermistor normal |
+
+- With no firmware controlling it, the charger runs in its standalone mode: charges to 4.208 V, 16-hour safety timer, and limits itself to 500 mA from USB. A full charge is slow. Stock firmware probably raises the limit.
+- The "cold" reading with the battery unplugged means the battery's yellow wire (its thermistor) feeds the charger's TS input, SGM41513 pin 11. [Inferred]; continuity not yet checked.
+- Battery read 3.57 V resting and 3.64 V on charge through the CW2015.
+- The gauge's charge percentage reads 0, likely because no battery profile is loaded. Go by voltage.
 
 ## GPIO
 
@@ -84,8 +103,8 @@ From the V3-E config. Nearly every usable pin is taken.
 | 32 / 33 | NFC reader UART RX / TX |
 | 34 | IO expander interrupt, input only |
 | 35 | Qi receiver temperature sensor, ADC |
-| 36 | Ambient light sensor D300, ADC. Connection confirmed by continuity [Board] |
-| 39 | Temperature sensor, ADC. Location unknown: not the speaker black wire or the battery's third wire [Board] |
+| 36 | Ambient light sensor D300, ADC. Confirmed by continuity and in firmware: about 500 mV covered, about 2600 mV in bright light [Board] |
+| 39 | Temperature sensor, ADC. Location unknown: not the speaker black wire or the battery's third wire. Reads a constant 3108 mV, the top of the ADC range, on USB-C and battery, so nothing is pulling it down. The sensor may need enabling [Board] |
 
 Test points [Board], shown in [this photo](../photos/09-programming-header-detail.jpg):
 
@@ -157,14 +176,14 @@ Everything inside uses plug-in cables, so the player comes apart and goes back t
 | Connector | Wires | Goes to | Source |
 | --- | --- | --- | --- |
 | Left and right speakers, bottom edge | 3 each: red, black, white | 8 Ω, 5 W speakers. Red and white reach the speaker, reading 8.2 Ω and 6.7 Ω. Black stops inside the foam tape, reads open to red and white, and connects to ground on the board, so it's likely a shield | [Board], shield [Inferred] |
-| Battery, bottom right | 3 | A&S 21700 cell, 3.7 V, 4500 mAh, with a small PCB on top. Yellow is the third wire. It reads 11.36 kΩ to black at room temperature, which fits a 10 kΩ thermistor. It doesn't connect to GPIO39 or ground on the board | [Board], thermistor [Inferred] |
+| Battery, bottom right | 3 | A&S 21700 cell, 3.7 V, 4500 mAh, with a small PCB on top. Yellow is the third wire. It reads 11.36 kΩ to black at room temperature, which fits a 10 kΩ thermistor. It doesn't connect to GPIO39 or ground on the board. The charger's behavior shows it goes to the SGM41513 thermistor input | [Board], thermistor [Inferred] |
 | Encoders, top left and top right | 4 each | The two dials | [Board] |
 | NFC, left edge | 2 | NFC antenna board under the card slot | [Board] |
 | P201, bottom | 7 | Qi receiver at the base | [Board] |
 | P303, bottom | 6 | Night-light LEDs around the rear edge | [Board] |
 | ESP32 antenna socket | Coax | External Wi-Fi antenna cable, routed under a panel hook | [Board] |
 
-The V3-E config lists a different battery (EVE-LJDX90X-4900) than the fitted A&S cell, which is the plain V3 entry's part. U105 is also the plain V3 entry's gauge type, so this board may mix parts from both entries. Everything tested from the V3-E entry has worked so far, including the amps, expanders and I2S pins. [Inferred]
+The V3-E config lists a different battery (EVE-LJDX90X-4900) than the fitted A&S cell, which is the plain V3 entry's part. The CW2015 gauge is also the plain V3 entry's, so this board mixes parts from both entries. Everything else tested from the V3-E entry has worked, including the amps, expanders and I2S pins. [Board]
 
 ## Chips
 
@@ -183,12 +202,12 @@ The V3-E config lists a different battery (EVE-LJDX90X-4900) than the fitted A&S
 | U301, second use of this label | HY 27.120 | 27.12 MHz crystal, very likely | Metal can with four corner pads, beside U900. The silkscreen appears to reuse U301, which is also on the AW2028H | Very likely |
 | U103 | HUSB238 | HUSB238 | USB-C power delivery | Confirmed |
 | U101 | ASCM | Unidentified, likely a switching regulator | 6 pins, near the top of the board, beside L102 and U206. L102 isn't directly on the 3.3 V rail and has a diode-like path to the battery connector. Exact function unknown | Inferred |
-| U100, silkscreen hidden | SGM41513 | SGM41513 | Battery charger | Part confirmed |
+| U100, silkscreen hidden | SGM41513 | SGM41513 | Battery charger (0x1A) | Confirmed by part ID register |
 | U300 | | microSD socket | Storage | Confirmed |
 | D300 | | Light sensor, part unidentified | Ambient light sensor on GPIO36, seen through an opening in the LED frame, with R307, R308 and C306 beside it | Confirmed by continuity |
-| U302 | 4D5, with data matrix | LIS2DH12, very likely | Accelerometer (0x18), next to TP40. About 2 mm square, package matches the datasheet, pin 1 connects to SCL | Very likely |
+| U302 | 4D5, with data matrix | LIS2DH12 | Accelerometer (0x18), next to TP40. About 2 mm square, package matches the datasheet, pin 1 connects to SCL | Confirmed by WHO_AM_I |
 | U301 | 28H DB | AW2028H, very likely | Night light LED driver (0x65), on the main board below the 6-pin connector. 8 pins: 3 on two sides, 1 on the others | Very likely |
 | Night light strip | Not removed | Glued in place | Rear LED strip around the back of the sound module. The driver is on the main board | Observed |
 | Qi board | Not removed, glued and screwed in place | CV8013N, likely | Wireless charging receiver on the bottom of the sound chamber, with a ring of magnets around the coil | Inferred |
-| U105 | 2015CH BDLR23 | CW2015CHBD, very likely | Battery fuel gauge, on the opposite side of the board near the battery connector | Very likely |
+| U105 | 2015CH BDLR23 | CW2015CHBD | Battery fuel gauge (0x62), on the opposite side of the board near the battery connector | Confirmed in firmware |
 | U105A | Empty | Not fitted | 3×3 pad grid beside U105. Fits a WLCSP-9, the package listed for the CW2215B, so likely an alternate gauge footprint | Inferred |
