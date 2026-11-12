@@ -54,10 +54,10 @@ label{font-size:12px;color:var(--dim)}
  <section class="card" id="playerCard">
   <h2>Player</h2>
   <div class="now" id="now">Nothing playing</div>
-  <div class="row"><button id="stop">Stop</button></div>
+  <div class="row"><button id="pause">Pause</button><button id="stop">Stop</button></div>
   <div class="vol"><span>Volume</span><span id="volV">−24 dB</span></div>
   <input type="range" id="vol" min="-48" max="0" step="6" value="-24">
-  <p class="hint">Plays 16-bit WAV files, mono or stereo, any sample rate. Start low and raise in steps.</p>
+  <p class="hint">Plays 16-bit WAV files, mono or stereo, any sample rate. Left knob: volume, press to pause. Right knob: next/previous file in the folder (/music if there is one), press to play/stop.</p>
  </section>
  <section class="card">
   <h2>Board</h2>
@@ -114,7 +114,8 @@ async function status(){
   h+=`<span>${s.ip}</span><span>up ${Math.floor(s.uptime/60)} min</span>`;
   $('stats').innerHTML=h;
   if(s.hotspot)$('wifiBox').open=true;
-  if('playing' in s){$('now').textContent=s.playing?'▶ '+s.playing:'Nothing playing';
+  if('playing' in s){$('now').textContent=s.charging_mode?'Charging mode: press a knob to wake':s.playing?(s.paused?'⏸ ':'▶ ')+s.playing:'Nothing playing';
+   $('pause').textContent=s.paused?'Resume':'Pause';
    if(document.activeElement!==$('vol')){$('vol').value=-s.volume_down;$('volV').textContent=(s.volume_down?'−':'')+s.volume_down+' dB'}}
   else $('playerCard').style.opacity=.4;
  }catch(e){$('stats').textContent='not responding'}
@@ -159,6 +160,7 @@ async function pollLog(){
    if($('follow').checked)l.scrollTop=l.scrollHeight}}catch(e){}
 }
 $('stop').onclick=async()=>{await post('/api/stop');setTimeout(status,300)};
+$('pause').onclick=async()=>{await post('/api/pause');setTimeout(status,300)};
 $('vol').oninput=e=>{const v=-e.target.value;$('volV').textContent=(v?'−':'')+v+' dB'};
 $('vol').onchange=e=>post('/api/volume?down='+(-e.target.value));
 $('restart').onclick=()=>{if(confirm('Restart the Yoto?'))post('/api/restart')};

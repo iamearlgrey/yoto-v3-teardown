@@ -98,8 +98,8 @@ From the V3-E config. Nearly every usable pin is taken.
 | 22 | SPI MOSI, display |
 | 23 | SPI SCLK, display |
 | 25 | I2C SCL |
-| 26 | Left encoder A (config also lists SPI MISO here) |
-| 27 | Right encoder A |
+| 26 | Left encoder A (config also lists SPI MISO here, so a display driver shouldn't use MISO). Working with internal pull-ups, 4 counts per click [Board] |
+| 27 | Right encoder A. Working with internal pull-ups, 4 counts per click [Board] |
 | 32 / 33 | NFC reader UART RX / TX |
 | 34 | IO expander interrupt, input only |
 | 35 | Qi receiver temperature sensor, ADC |

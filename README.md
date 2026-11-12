@@ -15,7 +15,7 @@ Teardown notes for the full-size Yoto Player 3rd generation, plus Arduino sketch
 
 | Path | What it is |
 | --- | --- |
-| [`firmware/yoto_v3_closeup/`](firmware/yoto_v3_closeup/) | **Start here.** Stereo WAV player with WiFi updates, a web page (log, SD files, battery), safe mode, power off, and start-up and shutdown sounds. `yoto_base.h` is reusable for your own sketches |
+| [`firmware/yoto_v3_closeup/`](firmware/yoto_v3_closeup/) | **Start here.** Stereo WAV player with both knobs, WiFi updates, a web page (log, SD files, battery), safe mode, power off, and start-up and shutdown sounds. `yoto_base.h` is reusable for your own sketches |
 | [`firmware/yoto_v3_amp_test/`](firmware/yoto_v3_amp_test/) | Arduino sketch that wakes both amps and beeps |
 | [`firmware/yoto_v3_stereo/`](firmware/yoto_v3_stereo/) | True stereo: each amp plays its own channel, with a left-to-right sweep |
 | [`firmware/yoto_v3_left_right/`](firmware/yoto_v3_left_right/) | Beeps each amp alone, to tell left from right |
@@ -83,6 +83,9 @@ The first stereo version stuttered during the sweep: computing double-precision 
 | Web page | Upload to the SD card, download, delete, and play WAV files in stereo |
 | Buttons | All read 0 when pressed: left knob IOX.0.5, right knob IOX.0.4, power IOX.1.3 |
 | Power off on battery | Releasing the power hold (IOX.3.1) alone didn't cut power. It works when the other expander pins are made inputs first, as Yoto's firmware does |
+| USB-C while off | Plugging in switches the player on, and it charges while running |
+| Knobs | Both work, decoded from pin-change interrupts at 4 counts per click: left on GPIO26/13, right on GPIO27/4 |
+| Static between files | With no audio playing, the amps (running without Yoto's DSP setup) hiss audibly. Muting them (PWMCTRL 0x08 bit 0) 1.5 s after the last sound, and unmuting just before the next, removes it with no clipped starts |
 
 Details in [`docs/hardware-reference.md`](docs/hardware-reference.md).
 
@@ -101,7 +104,12 @@ Back up first: see [`docs/download-mode.md`](docs/download-mode.md). The sketche
 | Action | How |
 | --- | --- |
 | Safe mode (WiFi, updates and web page only) | Hold a knob while switching on, or **Restart in safe mode** on the web page |
+| Volume | Turn the left knob (clockwise louder). A tick plays at the new level when nothing's playing |
+| Pause / resume | Press the left knob |
+| Next / previous file | Turn the right knob. It moves through the WAVs in the folder of the last file played, or `/music` if nothing has played yet |
+| Play / stop | Press the right knob |
 | Power off | Hold the power button 3 s, wait for the shutdown sound, let go. Only on battery: with USB-C in, the board stays powered |
+| Charging mode | If plugging in USB-C switched it on, the amps and sounds stay off until you press a knob or the power button (not yet tested) |
 | See what happened last time | `cal_log_prev.txt` on the SD card, and the "Last restart" line at the top of the log |
 
 Every sketch built on `yoto_base.h` keeps WiFi updates and safe mode, so the case can stay closed.

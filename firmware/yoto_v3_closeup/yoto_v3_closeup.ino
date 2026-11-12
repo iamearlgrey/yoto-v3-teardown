@@ -17,6 +17,15 @@
 
   WAV files: 16-bit PCM, mono or stereo, any sample rate (resampled to 48 kHz).
 
+  Knobs (matching Yoto's own layout for turning):
+    Left knob   turn = volume (clockwise louder; ticks when nothing is playing)
+                press = pause / resume
+    Right knob  turn = next / previous WAV in the current folder (/music if it exists)
+                press = play / stop
+
+  Charging mode: if plugging in USB-C switched the Yoto on, the amps and sounds stay
+  off (WiFi and the web page still work). Press a knob or the power button to wake.
+
   Optional sounds in the top folder of the SD card (in sd-card/ next to this sketch):
     startup.wav   plays as soon as the amps start, before WiFi
     ready.wav     plays once WiFi is up and the web page is reachable
@@ -26,6 +35,8 @@
 
 #include "yoto_base.h"
 #include <ESP_I2S.h>
+#include <vector>
+#include <algorithm>
 
 using yoto::log;
 using yoto::server;
@@ -114,7 +125,10 @@ bool ampStart(uint8_t amp, uint16_t i2sctrl, const char *side) {
 QueueHandle_t playQueue;
 volatile bool stopRequest = false;
 volatile bool playing = false;
+volatile bool paused = false;
+volatile bool tickRequest = false;
 char nowPlaying[160] = "";
+char lastPath[160] = "";
 
 uint32_t le32(const uint8_t *b) { return b[0] | (b[1] << 8) | (b[2] << 16) | ((uint32_t)b[3] << 24); }
 uint16_t le16(const uint8_t *b) { return b[0] | (b[1] << 8); }
@@ -197,7 +211,9 @@ void playWav(const char *path) {
       (unsigned long)wav.rate, seconds);
 
   strlcpy(nowPlaying, path, sizeof(nowPlaying));
+  strlcpy(lastPath, path, sizeof(lastPath));
   playing = true;
+  paused = false;
   stopRequest = false;
 
   // Linear-interpolation resampler, 16.16 fixed point. Integer maths only, so it keeps up.
@@ -206,6 +222,10 @@ void playWav(const char *path) {
   int inFrames = refill(0);
   bool done = inFrames < 2;
   while (!done && !stopRequest) {
+    if (paused) {                                   // hold position, keep the clocks going
+      i2s.write((const uint8_t *)silence, sizeof(silence));
+      continue;
+    }
     int n = 0;
     while (n < OUT_FRAMES) {
       uint32_t idx = pos >> 16;
@@ -232,7 +252,30 @@ void playWav(const char *path) {
   wavFile.close();
   log(stopRequest ? "Stopped.\n" : "Finished.\n");
   nowPlaying[0] = 0;
+  paused = false;
   playing = false;
+}
+
+// A short tick at the current volume, so you can hear the level while turning
+// the volume knob with nothing playing.
+void playTick() {
+  const int frames = OUT_RATE * 60 / 1000;          // 60 ms
+  const float stepPhase = 2.0f * PI * 880.0f / OUT_RATE;
+  float phase = 0;
+  for (int done = 0; done < frames;) {
+    int n = min(OUT_FRAMES, frames - done);
+    for (int i = 0; i < n; i++) {
+      int t = done + i;
+      float env = min(1.0f, min(t, frames - t) / 240.0f);   // 5 ms fade in and out
+      int16_t s = (int16_t)(sinf(phase) * env * 0.3f * 32767);
+      outBuf[i * 2] = s;
+      outBuf[i * 2 + 1] = s;
+      phase += stepPhase;
+      if (phase > 2 * PI) phase -= 2 * PI;
+    }
+    i2s.write((const uint8_t *)outBuf, n * 4);
+    done += n;
+  }
 }
 
 void audioTask(void *) {
@@ -242,10 +285,43 @@ void audioTask(void *) {
       playWav(path);
       continue;
     }
+    if (tickRequest) {
+      tickRequest = false;
+      playTick();
+      continue;
+    }
     // Silence between files keeps the clocks running and stops the I2S
     // hardware from repeating its last buffer as a buzz.
     i2s.write((const uint8_t *)silence, sizeof(silence));
   }
+}
+
+// ---------- Idle mute ----------
+// With nothing playing, the amps' own noise is audible as static. They're muted
+// (PWMCTRL 0x08 bit 0) after a moment of silence and unmuted just before any sound.
+// Only called from the main loop task, so I2C use stays in one place.
+bool ampsMuted = false;
+uint32_t lastSoundMs = 0;
+const uint32_t IDLE_MUTE_MS = 1500;
+
+void setAmpsMuted(bool mute) {
+  for (uint8_t amp : {AMP_L, AMP_R}) {
+    int32_t p = read16(amp, 0x08);
+    if (p >= 0) write16(amp, 0x08, (uint16_t)(mute ? (p | 1) : (p & ~1)));
+  }
+  ampsMuted = mute;
+}
+
+void wakeAmps() {
+  lastSoundMs = millis();
+  if (ampsMuted && ampsOk) setAmpsMuted(false);
+}
+
+void idleMuteCheck() {
+  if (!ampsOk || ampsMuted) return;
+  if (playing && !paused) { lastSoundMs = millis(); return; }
+  if (tickRequest) return;
+  if (millis() - lastSoundMs > IDLE_MUTE_MS) setAmpsMuted(true);
 }
 
 void stopAudio() {
@@ -253,64 +329,27 @@ void stopAudio() {
   xQueueReset(playQueue);
   if (!playing) return;
   stopRequest = true;
+  paused = false;
   for (int i = 0; i < 100 && playing; i++) delay(10);
 }
 
-// Before switching off: amplifier off, then chip power-down (SYSCTRL bits 1 and 0).
-void ampsOff() {
-  for (uint8_t amp : {AMP_L, AMP_R}) {
-    int32_t s = read16(amp, 0x04);
-    if (s >= 0) write16(amp, 0x04, (uint16_t)(s | 0x0003));
-  }
-}
+// ---------- Starting the audio (now, or later in charging mode) ----------
+bool audioTried = false;
 
-// ---------- Web routes for the player ----------
-void setupPlayerRoutes() {
-  server.on("/api/play", HTTP_POST, []() {
-    String p = yoto::cleanPath(server.arg("path"));
-    if (!ampsOk) { server.send(503, "text/plain", "The amps didn't start; see the log"); return; }
-    if (p.length() < 2) { server.send(400, "text/plain", "Bad path"); return; }
-    stopAudio();
-    char path[160];
-    strlcpy(path, p.c_str(), sizeof(path));
-    xQueueSend(playQueue, path, 0);
-    server.send(200, "text/plain", "OK");
-  });
-  server.on("/api/stop", HTTP_POST, []() {
-    stopAudio();
-    server.send(200, "text/plain", "OK");
-  });
-  server.on("/api/volume", HTTP_POST, []() {
-    setVolume(server.arg("down").toInt());
-    log("Volume -%d dB\n", volumeDown);
-    server.send(200, "text/plain", "OK");
-  });
-}
-
-String playerStatus() {
-  return "\"playing\":\"" + yoto::jsonEscape(String(nowPlaying)) + "\",\"volume_down\":" + String(volumeDown) +
-         ",\"amps\":" + String(ampsOk ? "true" : "false");
-}
-
-// ---------- Sounds for start-up, ready and switch-off ----------
-// Optional files in the top folder of the SD card. Missing files are skipped.
 bool playIfExists(const char *path) {
   if (!ampsOk || !playQueue || !yoto::sdOk || !SD_MMC.exists(path)) return false;
+  wakeAmps();
   char p[160];
   strlcpy(p, path, sizeof(p));
   return xQueueSend(playQueue, p, 0) == pdTRUE;
 }
 
-// Plays /shutdown.wav to the end (up to 4 s) before the board switches off.
-void goodbye() {
-  stopAudio();
-  if (!playIfExists("/shutdown.wav")) return;
-  for (int i = 0; i < 50 && !playing; i++) delay(10);     // wait for it to start
-  for (int i = 0; i < 400 && playing; i++) delay(10);     // then to finish
-}
-
-// Runs inside yoto::begin(), before WiFi, so the start-up sound comes right away.
+// Starts I2S, both amps and the audio task, then plays /startup.wav.
+// Runs inside yoto::begin() before WiFi, so the start-up sound comes right away,
+// unless USB-C switched the Yoto on (charging mode): then it waits for a button.
 void startAudio() {
+  if (audioTried) return;
+  audioTried = true;
   memset(silence, 0, sizeof(silence));
   i2s.setPins(PIN_BCLK, PIN_LRCLK, PIN_DOUT, -1, PIN_MCLK);
   if (!i2s.begin(I2S_MODE_STD, OUT_RATE, I2S_DATA_BIT_WIDTH_16BIT, I2S_SLOT_MODE_STEREO)) {
@@ -329,23 +368,189 @@ void startAudio() {
   playIfExists("/startup.wav");
 }
 
+void earlyStart() {
+  if (yoto::wokeByUsb) {
+    log("Charging mode: amps and sounds stay off. Press a knob or the power button, or play something, to wake.\n");
+    return;
+  }
+  startAudio();
+}
+
+// Wakes the audio if charging mode left it off. Returns true when audio is ready.
+bool ensureAudio() {
+  if (!audioTried) {
+    log("Waking from charging mode.\n");
+    startAudio();
+    return false;                    // the start-up sound is the response to this press
+  }
+  return playQueue && ampsOk;
+}
+
+// ---------- Tracks: the folder of the last file played ----------
+// Turning the right knob moves through the WAV files in that folder, in name order.
+// With nothing played yet it uses /music if it exists, otherwise the top folder.
+// The start-up, ready and shutdown sounds are skipped.
+String currentFolder() {
+  String last = lastPath;
+  if (last.length()) {
+    int slash = last.lastIndexOf('/');
+    return slash > 0 ? last.substring(0, slash) : String("/");
+  }
+  return SD_MMC.exists("/music") ? String("/music") : String("/");
+}
+
+bool isTrack(const String &name) {
+  String n = name;
+  n.toLowerCase();
+  if (!n.endsWith(".wav") || n.startsWith(".")) return false;
+  return n != "startup.wav" && n != "ready.wav" && n != "shutdown.wav";
+}
+
+std::vector<String> listTracks(const String &folder) {
+  std::vector<String> out;
+  File d = SD_MMC.open(folder);
+  if (!d || !d.isDirectory()) return out;
+  File f = d.openNextFile();
+  while (f && out.size() < 300) {
+    String name = f.name();
+    if (!f.isDirectory() && isTrack(name)) out.push_back((folder == "/" ? "" : folder) + "/" + name);
+    f.close();
+    f = d.openNextFile();
+  }
+  d.close();
+  std::sort(out.begin(), out.end(), [](const String &a, const String &b) { return a.compareTo(b) < 0; });
+  return out;
+}
+
+void playTrack(const String &path) {
+  if (!ensureAudio()) return;
+  stopAudio();
+  wakeAmps();
+  char p[160];
+  strlcpy(p, path.c_str(), sizeof(p));
+  xQueueSend(playQueue, p, 0);
+}
+
+void stepTrack(int by) {
+  if (!yoto::sdOk) return;
+  String folder = currentFolder();
+  std::vector<String> tracks = listTracks(folder);
+  if (tracks.empty()) { log("No WAV files in %s\n", folder.c_str()); return; }
+  int n = tracks.size(), at = -1;
+  for (int i = 0; i < n; i++) if (tracks[i] == String(lastPath)) at = i;
+  int next = at < 0 ? (by > 0 ? 0 : n - 1) : ((at + by) % n + n) % n;   // wraps around
+  playTrack(tracks[next]);
+}
+
+// ---------- Knobs and buttons ----------
+// Left knob: turn = volume (clockwise louder), press = pause / resume.
+// Right knob: turn = next / previous track, press = play / stop.
+const int VOLUME_STEP_DB = 3;
+
+void onKnob(int knob, int clicks) {
+  if (knob == 0) {
+    int before = volumeDown;
+    setVolume(volumeDown - clicks * VOLUME_STEP_DB);
+    if (volumeDown != before) log("Volume -%d dB\n", volumeDown);
+    if (!ensureAudio()) return;
+    if (!playing) {                      // let you hear the new level
+      wakeAmps();
+      tickRequest = true;
+    }
+  } else {
+    stepTrack(clicks > 0 ? 1 : -1);
+  }
+}
+
+void onButton(int button, bool pressed) {
+  if (!pressed) return;
+  if (button == 2) { ensureAudio(); return; }   // power button: only wakes from charging mode
+  if (!ensureAudio()) return;
+  if (button == 0) {
+    if (playing) {
+      if (paused) wakeAmps();
+      paused = !paused;
+      log(paused ? "Paused.\n" : "Resumed.\n");
+    }
+  } else {
+    if (playing) stopAudio();
+    else if (lastPath[0]) playTrack(String(lastPath));
+    else stepTrack(1);
+  }
+}
+
+// ---------- Web routes for the player ----------
+void setupPlayerRoutes() {
+  server.on("/api/play", HTTP_POST, []() {
+    String p = yoto::cleanPath(server.arg("path"));
+    if (p.length() < 2) { server.send(400, "text/plain", "Bad path"); return; }
+    if (!audioTried) { ensureAudio(); delay(300); }
+    if (!ampsOk) { server.send(503, "text/plain", "The amps didn't start; see the log"); return; }
+    playTrack(p);
+    server.send(200, "text/plain", "OK");
+  });
+  server.on("/api/stop", HTTP_POST, []() {
+    stopAudio();
+    server.send(200, "text/plain", "OK");
+  });
+  server.on("/api/pause", HTTP_POST, []() {
+    if (playing) {
+      if (paused) wakeAmps();
+      paused = !paused;
+    }
+    server.send(200, "text/plain", "OK");
+  });
+  server.on("/api/volume", HTTP_POST, []() {
+    setVolume(server.arg("down").toInt());
+    log("Volume -%d dB\n", volumeDown);
+    server.send(200, "text/plain", "OK");
+  });
+}
+
+String playerStatus() {
+  return "\"playing\":\"" + yoto::jsonEscape(String(nowPlaying)) + "\",\"paused\":" + String(paused ? "true" : "false") +
+         ",\"volume_down\":" + String(volumeDown) + ",\"amps\":" + String(ampsOk ? "true" : "false") +
+         ",\"charging_mode\":" + String(!audioTried ? "true" : "false");
+}
+
+// Plays /shutdown.wav to the end (up to 4 s) before the board switches off.
+void goodbye() {
+  stopAudio();
+  if (!playIfExists("/shutdown.wav")) return;
+  for (int i = 0; i < 50 && !playing; i++) delay(10);     // wait for it to start
+  for (int i = 0; i < 400 && playing; i++) delay(10);     // then to finish
+}
+
+// Before switching off: amplifier off, then chip power-down (SYSCTRL bits 1 and 0).
+void ampsOff() {
+  if (!audioTried) return;
+  for (uint8_t amp : {AMP_L, AMP_R}) {
+    int32_t s = read16(amp, 0x04);
+    if (s >= 0) write16(amp, 0x04, (uint16_t)(s | 0x0003));
+  }
+}
+
 // ---------- Main ----------
 void setup() {
-  yoto::earlyHook = startAudio;
+  yoto::earlyHook = earlyStart;
   bool safe = yoto::begin();
   if (safe) return;                   // safe mode: base only
-  if (!playQueue) return;             // audio didn't start; the log says why
 
   yoto::stopHook = stopAudio;
   yoto::shutdownHook = ampsOff;
   yoto::goodbyeHook = goodbye;
   yoto::statusHook = playerStatus;
+  yoto::knobHook = onKnob;
+  yoto::buttonHook = onButton;
   setupPlayerRoutes();
-  log("Player ready. Volume -%d dB.\n", volumeDown);
+  if (!audioTried) return;            // charging mode: quiet until woken
+  log("Player ready. Volume -%d dB. Left knob: volume, press to pause. Right knob: tracks, press to play/stop.\n",
+      volumeDown);
   playIfExists("/ready.wav");         // the web page is reachable now
 }
 
 void loop() {
   yoto::loop();
+  idleMuteCheck();
   delay(2);
 }

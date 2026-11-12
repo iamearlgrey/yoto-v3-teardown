@@ -44,6 +44,7 @@ const char *AP_NAME   = "CAL-Yoto-Setup";
 // ---------- State ----------
 WebServer server(80);
 bool safeMode = false;
+bool wokeByUsb = false;            // switched on by plugging in USB-C, not by the power button
 bool sdOk = false;
 bool apMode = false;
 void (*stopHook)() = nullptr;      // set by the app
@@ -237,6 +238,65 @@ void powerOff() {
   ESP.restart();
 }
 
+// ---------- Knobs (rotary encoders) ----------
+// Left dial: A GPIO26, B GPIO13, push IOX.0.5. Right dial: A GPIO27, B GPIO4, push IOX.0.4.
+// (Pins from Yoto's V3-E config and open-yoto's notes. GPIO26 is also the display's
+// SPI MISO, so the display driver must not use MISO.)
+// Decoded in software from pin-change interrupts. COUNTS_PER_CLICK is 4 on the Mini
+// (open-yoto); the log prints raw counts per turn so this can be checked.
+const int KNOB_PINS[2][2] = {{26, 13}, {27, 4}};
+int COUNTS_PER_CLICK = 4;
+bool KNOB_INVERT[2] = {false, false};      // flip if clockwise comes out negative
+
+volatile int32_t knobRaw[2] = {0, 0};
+volatile uint8_t knobState[2] = {0, 0};
+int32_t knobLogged[2] = {0, 0};
+uint32_t knobLastMove[2] = {0, 0};
+int32_t knobTaken[2] = {0, 0};
+
+void (*knobHook)(int knob, int clicks) = nullptr;          // knob 0 = left, 1 = right; + = clockwise
+void (*buttonHook)(int button, bool pressed) = nullptr;    // 0 = left knob, 1 = right knob, 2 = power
+
+static const int8_t QUAD[16] = {0, -1, 1, 0, 1, 0, 0, -1, -1, 0, 0, 1, 0, 1, -1, 0};
+
+void IRAM_ATTR knobIsr(void *arg) {
+  int k = (int)(intptr_t)arg;
+  uint8_t s = (digitalRead(KNOB_PINS[k][0]) << 1) | digitalRead(KNOB_PINS[k][1]);
+  knobRaw[k] += QUAD[(knobState[k] << 2) | s];
+  knobState[k] = s;
+}
+
+void setupKnobs() {
+  for (int k = 0; k < 2; k++) {
+    pinMode(KNOB_PINS[k][0], INPUT_PULLUP);
+    pinMode(KNOB_PINS[k][1], INPUT_PULLUP);
+    knobState[k] = (digitalRead(KNOB_PINS[k][0]) << 1) | digitalRead(KNOB_PINS[k][1]);
+    attachInterruptArg(KNOB_PINS[k][0], knobIsr, (void *)(intptr_t)k, CHANGE);
+    attachInterruptArg(KNOB_PINS[k][1], knobIsr, (void *)(intptr_t)k, CHANGE);
+  }
+}
+
+void pollKnobs() {
+  for (int k = 0; k < 2; k++) {
+    int32_t raw = knobRaw[k];
+    if (raw != knobLogged[k] && !knobLastMove[k]) knobLastMove[k] = millis();
+    // whole clicks since last time
+    int32_t clicks = (raw - knobTaken[k]) / COUNTS_PER_CLICK;
+    if (clicks) {
+      knobTaken[k] += clicks * COUNTS_PER_CLICK;
+      knobLastMove[k] = millis();
+      if (knobHook) knobHook(k, KNOB_INVERT[k] ? -clicks : clicks);
+    }
+    // after the knob rests for 300 ms, log the raw count (for checking COUNTS_PER_CLICK)
+    if (knobLastMove[k] && raw != knobLogged[k] && millis() - knobLastMove[k] > 300) {
+      log("%s knob turned: %+ld raw counts (%d per click)\n", k ? "Right" : "Left",
+          (long)(raw - knobLogged[k]), COUNTS_PER_CLICK);
+      knobLogged[k] = raw;
+      knobLastMove[k] = 0;
+    }
+  }
+}
+
 bool powerArmed = false;           // only after the button has been seen released (not the press that switched it on)
 uint32_t pressStart = 0;
 uint32_t knobStart = 0;
@@ -253,9 +313,18 @@ void pollInputs() {
   bool power = !((p1 >> 3) & 1), phones = !((p1 >> 1) & 1);
   if (p0 != lastP0 || p1 != lastP1) {
     if (lastP0 >= 0) {
-      if (((p0 ^ lastP0) >> 5) & 1) log("Left knob %s\n", left ? "pressed" : "released");
-      if (((p0 ^ lastP0) >> 4) & 1) log("Right knob %s\n", right ? "pressed" : "released");
-      if (((p1 ^ lastP1) >> 3) & 1) log("Power button %s\n", power ? "pressed" : "released");
+      if (((p0 ^ lastP0) >> 5) & 1) {
+        log("Left knob %s\n", left ? "pressed" : "released");
+        if (buttonHook) buttonHook(0, left);
+      }
+      if (((p0 ^ lastP0) >> 4) & 1) {
+        log("Right knob %s\n", right ? "pressed" : "released");
+        if (buttonHook) buttonHook(1, right);
+      }
+      if (((p1 ^ lastP1) >> 3) & 1) {
+        log("Power button %s\n", power ? "pressed" : "released");
+        if (buttonHook) buttonHook(2, power);
+      }
       if (((p1 ^ lastP1) >> 1) & 1) log("Headphones %s\n", phones ? "in" : "out");
     }
     int other0 = (p0 ^ lastP0) & ~0x30, other1 = (p1 ^ lastP1) & ~0x0A;
@@ -664,6 +733,10 @@ bool begin() {
   pollBattery(true);
   log("Battery %.2f V, %s, %s\n", batteryVolts, inputState.c_str(), chargeState.c_str());
 
+  wokeByUsb = esp_reset_reason() == ESP_RST_POWERON && usbPresent() && !powerButtonDown();
+  if (wokeByUsb) log("Switched on by USB-C.\n");
+  setupKnobs();
+
   if (!safeMode && earlyHook) earlyHook();   // e.g. start audio and play the startup sound
   startWifi();
   setupOta();
@@ -677,6 +750,7 @@ void loop() {
   ArduinoOTA.handle();
   server.handleClient();
   pollInputs();
+  pollKnobs();
   pollBattery();
   saveLog();
 }
