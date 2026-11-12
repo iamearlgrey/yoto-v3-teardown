@@ -1,6 +1,6 @@
 # Yoto Player V3 teardown
 
-Teardown notes for the full-size Yoto Player 3rd generation, plus small Arduino sketches that play tones through both original speakers, now in true stereo, and read the board's battery and sensor chips. It's tested on real V3 hardware and uses the datasheet power-up sequence, with no Yoto firmware or DSP blobs.
+Teardown notes for the full-size Yoto Player 3rd generation, plus Arduino sketches for it. The main one, [`yoto_v3_closeup`](firmware/yoto_v3_closeup/), plays WAV files in stereo through both original speakers and runs with the case closed: WiFi updates, a web page for the SD card, safe mode and power off. Smaller sketches test the amps, battery and sensor chips. It's tested on real V3 hardware and uses the datasheet power-up sequence, with no Yoto firmware or DSP blobs.
 
 **The key finding:** the V3 uses two AW88194 smart amps at I2C 0x34 and 0x37. They stay in reset, and invisible to an I2C scan, until IO expander pin IOX.2.4 goes high. Stock firmware does that at boot. Custom firmware has to do it too.
 
@@ -15,6 +15,7 @@ Teardown notes for the full-size Yoto Player 3rd generation, plus small Arduino 
 
 | Path | What it is |
 | --- | --- |
+| [`firmware/yoto_v3_closeup/`](firmware/yoto_v3_closeup/) | **Start here.** Stereo WAV player with WiFi updates, a web page (log, SD files, battery), safe mode, power off, and start-up and shutdown sounds. `yoto_base.h` is reusable for your own sketches |
 | [`firmware/yoto_v3_amp_test/`](firmware/yoto_v3_amp_test/) | Arduino sketch that wakes both amps and beeps |
 | [`firmware/yoto_v3_stereo/`](firmware/yoto_v3_stereo/) | True stereo: each amp plays its own channel, with a left-to-right sweep |
 | [`firmware/yoto_v3_left_right/`](firmware/yoto_v3_left_right/) | Beeps each amp alone, to tell left from right |
@@ -73,13 +74,41 @@ The board reset with a brownout (`E BOD`) when USB-C was unplugged. That's expec
 
 The first stereo version stuttered during the sweep: computing double-precision sine and cosine for every sample was too slow at 48 kHz. A sine lookup table and per-chunk pan gains fixed it. Keep per-sample audio maths simple on the ESP32.
 
+### Nov 11–12, 2026: running with the case closed
+
+| Test | Result |
+| --- | --- |
+| WiFi | Joins a 2.4 GHz network at −52 dBm. With the external antenna unplugged the same network read −88 dBm and every login failed (reason 2), even with the right password |
+| Wireless update | Works from Arduino IDE's network port |
+| Web page | Upload to the SD card, download, delete, and play WAV files in stereo |
+| Buttons | All read 0 when pressed: left knob IOX.0.5, right knob IOX.0.4, power IOX.1.3 |
+| Power off on battery | Releasing the power hold (IOX.3.1) alone didn't cut power. It works when the other expander pins are made inputs first, as Yoto's firmware does |
+
 Details in [`docs/hardware-reference.md`](docs/hardware-reference.md).
 
-## Running the sketch
+## Running the sketches
 
-Back up first: see [`docs/download-mode.md`](docs/download-mode.md). The sketch needs the Arduino IDE with esp32 core 3.x, board **ESP32 Wrover Module**. Enter download mode, then upload. Do a full power cycle afterward.
+Back up first: see [`docs/download-mode.md`](docs/download-mode.md). The sketches need the Arduino IDE with esp32 core 3.x (tested with 3.3.12), board **ESP32 Wrover Module**. Enter download mode, then upload. Do a full power cycle afterward.
 
-Volume starts low on purpose. Raise `VOLUME_DB_DOWN` in small steps. Results go to Serial at 115200 and to `amp_test_log.txt` on the SD card, because my programming wires and speakers couldn't stay connected together.
+### The close-up firmware
+
+1. In Tools, set Partition Scheme to **Minimal SPIFFS (1.9MB APP with OTA/128KB SPIFFS)**. Wireless updates need it. Keep it for every later upload.
+2. Make sure the Wi-Fi antenna cable is plugged into the ESP32 module.
+3. Upload by cable once. With no `/wifi.txt` on the SD card, the player starts a hotspot called **CAL-Yoto-Setup**. Join it, open `http://192.168.4.1`, and enter your 2.4 GHz network.
+4. After that, open `http://cal-yoto.local`. Later uploads go over WiFi: pick the **cal-yoto** network port in Arduino IDE.
+5. Optional: copy the sounds in [`sd-card/`](firmware/yoto_v3_closeup/sd-card/) to the top folder of the SD card, from the web page or a card reader.
+
+| Action | How |
+| --- | --- |
+| Safe mode (WiFi, updates and web page only) | Hold a knob while switching on, or **Restart in safe mode** on the web page |
+| Power off | Hold the power button 3 s, wait for the shutdown sound, let go. Only on battery: with USB-C in, the board stays powered |
+| See what happened last time | `cal_log_prev.txt` on the SD card, and the "Last restart" line at the top of the log |
+
+Every sketch built on `yoto_base.h` keeps WiFi updates and safe mode, so the case can stay closed.
+
+### The test sketches
+
+Volume starts low on purpose. Raise `VOLUME_DB_DOWN` in small steps. Results go to Serial at 115200 and to a log file on the SD card, because my programming wires and speakers couldn't stay connected together.
 
 ## How this relates to open-yoto
 
@@ -90,7 +119,7 @@ Volume starts low on purpose. Raise `VOLUME_DB_DOWN` in small steps. Results go 
 | Tested on | Yoto Mini | Full-size V3 (V3-E config) |
 | Amps started | One, at 0x34 | Both, 0x34 and 0x37 |
 | Method | Loads Yoto's register table and DSP firmware | Datasheet sequence only, no DSP load |
-| Output | Full audio player | Test tone |
+| Output | Full audio player | Stereo WAV player, plus test tones |
 | Physical teardown | Links to Adafruit | Connectors, chips, header, fuses |
 
 Yoto's stock firmware loads DSP firmware and tuning into the amp, and this sketch doesn't. I don't know how the amps behave at high volume without it, so go up slowly.
@@ -101,6 +130,7 @@ Adafruit's guide lists the AW88194 at 0x64. Yoto's V3-E config puts a CW2215B ba
 
 ## Still unknown
 
+- Why playback stopped once while I was raising the volume on battery. The firmware now logs the restart reason to catch it next time.
 - What 0x75 is.
 - Where the GPIO39 temperature sensor is. It isn't the speaker harness black wire or the battery's third wire, and it reads at the top of the ADC range, so it may need enabling.
 - How stock firmware raises the charger's 500 mA input limit.

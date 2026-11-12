@@ -1,0 +1,178 @@
+// The web page served at http://cal-yoto.local (kept in flash).
+#pragma once
+
+const char PAGE[] = R"HTML(<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>CAL Yoto</title>
+<style>
+:root{--bg:#141510;--panel:#1c1d17;--line:#33352b;--ink:#e9e6d8;--dim:#8f8d7f;--amber:#ffb340;--red:#ff6b5a;--green:#9fd36b;
+--mono:ui-monospace,SFMono-Regular,Menlo,monospace;--sans:-apple-system,BlinkMacSystemFont,"Helvetica Neue",sans-serif}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 var(--sans)}
+.wrap{max-width:980px;margin:0 auto;padding:20px 16px 40px}
+header{display:flex;justify-content:space-between;align-items:flex-end;gap:12px;flex-wrap:wrap;border-bottom:1px solid var(--line);padding-bottom:14px;margin-bottom:16px}
+h1{font:600 22px var(--mono);letter-spacing:.08em;margin:0;color:var(--amber)}
+.sub{font:11px var(--mono);color:var(--dim);letter-spacing:.12em;text-transform:uppercase;margin-top:4px}
+.stats{display:flex;gap:14px;flex-wrap:wrap;font:12px var(--mono);color:var(--dim)}
+.stats b{color:var(--ink);font-weight:500}
+.badge{font:600 11px var(--mono);padding:3px 8px;border-radius:3px;background:var(--red);color:#1a0d0a;letter-spacing:.06em}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+@media(max-width:760px){.grid{grid-template-columns:1fr}}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:16px;min-width:0}
+.card.wide{grid-column:1/-1}
+h2{font:600 11px var(--mono);letter-spacing:.16em;text-transform:uppercase;color:var(--dim);margin:0 0 12px}
+button,input[type=text],input[type=password]{font:13px var(--sans);color:var(--ink);background:#10110e;border:1px solid var(--line);border-radius:4px;padding:7px 12px}
+button{cursor:pointer}button:hover{border-color:var(--amber)}
+button.primary{background:var(--amber);color:#1a1405;border-color:var(--amber);font-weight:600}
+button.small{padding:3px 9px;font-size:12px}
+button.danger:hover{border-color:var(--red);color:var(--red)}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.now{font:13px var(--mono);color:var(--amber);min-height:20px;margin-bottom:10px;word-break:break-all}
+input[type=range]{width:100%;accent-color:var(--amber)}
+.vol{display:flex;justify-content:space-between;font:12px var(--mono);color:var(--dim);margin-top:12px}
+.path{font:12px var(--mono);color:var(--dim);margin:10px 0 6px;word-break:break-all}
+.list{border:1px solid var(--line);border-radius:4px;max-height:360px;overflow:auto}
+.item{display:flex;align-items:center;gap:8px;padding:6px 10px;border-bottom:1px solid var(--line);font:13px var(--mono)}
+.item:last-child{border-bottom:0}
+.item .n{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.item .n.folder{color:var(--amber);cursor:pointer}
+.item .s{color:var(--dim);font-size:12px;white-space:nowrap}
+.drop{border:1px dashed var(--line);border-radius:4px;padding:14px;text-align:center;color:var(--dim);margin-top:10px;font-size:13px}
+.drop.on{border-color:var(--amber);color:var(--amber)}
+.prog{font:12px var(--mono);color:var(--amber);margin-top:6px;min-height:16px}
+pre{font:12px/1.5 var(--mono);background:#0c0d0a;border:1px solid var(--line);border-radius:4px;padding:10px;margin:0;height:280px;overflow:auto;white-space:pre-wrap;word-break:break-all}
+label{font-size:12px;color:var(--dim)}
+.form{display:grid;gap:8px;max-width:360px}
+.hint{color:var(--dim);font-size:12px;margin:8px 0 0}
+</style></head><body><div class="wrap">
+<header>
+ <div><h1>CAL · YOTO</h1><div class="sub">Unit 54.2 · body console</div></div>
+ <div class="stats" id="stats">connecting…</div>
+</header>
+<div class="grid">
+ <section class="card" id="playerCard">
+  <h2>Player</h2>
+  <div class="now" id="now">Nothing playing</div>
+  <div class="row"><button id="stop">Stop</button></div>
+  <div class="vol"><span>Volume</span><span id="volV">−24 dB</span></div>
+  <input type="range" id="vol" min="-48" max="0" step="6" value="-24">
+  <p class="hint">Plays 16-bit WAV files, mono or stereo, any sample rate. Start low and raise in steps.</p>
+ </section>
+ <section class="card">
+  <h2>Board</h2>
+  <div class="row">
+   <button id="restart">Restart</button>
+   <button id="safe">Restart in safe mode</button>
+   <button id="off" class="danger">Power off</button>
+  </div>
+  <details id="wifiBox" style="margin-top:14px"><summary style="cursor:pointer;color:var(--amber);font:12px var(--mono)">WiFi settings</summary>
+   <form class="form" id="wifiForm" style="margin-top:10px">
+    <label>Network name<input type="text" name="ssid" list="nets" required autocapitalize="off" autocorrect="off" style="width:100%"></label>
+    <datalist id="nets"></datalist>
+    <label>Password<input type="password" name="pass" id="pass" autocapitalize="off" autocorrect="off" style="width:100%"></label>
+    <label><input type="checkbox" onchange="pass.type=this.checked?'text':'password'"> show password</label>
+    <label>Update password (optional)<input type="password" name="ota" style="width:100%"></label>
+    <button class="primary">Save and restart</button>
+   </form>
+  </details>
+  <p class="hint">Safe mode: hold a knob while switching on, or use the button above. Power off: hold the power button 3 s, then let go. The last session's log is saved as cal_log_prev.txt on the card.</p>
+ </section>
+ <section class="card wide">
+  <h2>SD card</h2>
+  <div class="row">
+   <button id="up" class="small">Up</button>
+   <button id="mk" class="small">New folder</button>
+   <label class="small" style="cursor:pointer"><input type="file" id="file" multiple style="display:none"><span style="border:1px solid var(--line);border-radius:4px;padding:4px 10px;color:var(--ink)">Upload files</span></label>
+   <button id="refresh" class="small">Refresh</button>
+  </div>
+  <div class="path" id="path">/</div>
+  <div class="list" id="list"></div>
+  <div class="drop" id="drop">Drop files here to copy them into this folder</div>
+  <div class="prog" id="prog"></div>
+ </section>
+ <section class="card wide">
+  <div class="row" style="justify-content:space-between"><h2 style="margin:0">Log</h2>
+   <label><input type="checkbox" id="follow" checked> follow</label></div>
+  <pre id="log" style="margin-top:10px"></pre>
+ </section>
+</div></div>
+<script>
+const $=id=>document.getElementById(id);
+let dir='/',logSince=0;
+const post=(u)=>fetch(u,{method:'POST'});
+const join=(d,n)=>(d==='/'?'':d)+'/'+n;
+const size=b=>b<1024?b+' B':b<1048576?(b/1024).toFixed(1)+' KB':(b/1048576).toFixed(1)+' MB';
+
+async function status(){
+ try{const s=await (await fetch('/api/status')).json();
+  let h='';
+  if(s.safe)h+='<span class="badge">SAFE MODE</span>';
+  if(s.hotspot)h+='<span class="badge">SETUP HOTSPOT</span>';
+  h+=`<span>battery <b>${s.volts.toFixed(2)} V</b></span><span><b>${s.input}</b>, ${s.charge}</span>`;
+  if(!s.hotspot)h+=`<span>wifi <b>${s.rssi} dBm</b></span>`;
+  h+=`<span>${s.ip}</span><span>up ${Math.floor(s.uptime/60)} min</span>`;
+  $('stats').innerHTML=h;
+  if(s.hotspot)$('wifiBox').open=true;
+  if('playing' in s){$('now').textContent=s.playing?'▶ '+s.playing:'Nothing playing';
+   if(document.activeElement!==$('vol')){$('vol').value=-s.volume_down;$('volV').textContent=(s.volume_down?'−':'')+s.volume_down+' dB'}}
+  else $('playerCard').style.opacity=.4;
+ }catch(e){$('stats').textContent='not responding'}
+}
+async function list(){
+ $('path').textContent=dir;
+ const r=await fetch('/api/list?dir='+encodeURIComponent(dir));
+ if(!r.ok){$('list').innerHTML='<div class="item">Folder not found</div>';return}
+ const j=await r.json();
+ j.items.sort((a,b)=>(b.dir-a.dir)||a.name.localeCompare(b.name));
+ $('list').innerHTML='';
+ if(!j.items.length)$('list').innerHTML='<div class="item"><span class="n" style="color:var(--dim)">Empty folder</span></div>';
+ for(const it of j.items){
+  const p=join(dir,it.name),row=document.createElement('div');row.className='item';
+  const n=document.createElement('span');n.className='n'+(it.dir?' folder':'');n.textContent=(it.dir?'▸ ':'')+it.name;
+  if(it.dir)n.onclick=()=>{dir=p;list()};
+  row.appendChild(n);
+  if(!it.dir){const s=document.createElement('span');s.className='s';s.textContent=size(it.size);row.appendChild(s);
+   if(/\.wav$/i.test(it.name)){const b=document.createElement('button');b.className='small primary';b.textContent='Play';
+    b.onclick=async()=>{const r=await post('/api/play?path='+encodeURIComponent(p));if(!r.ok)alert(await r.text());setTimeout(status,300)};row.appendChild(b)}
+   const a=document.createElement('a');a.href='/api/download?path='+encodeURIComponent(p);
+   a.innerHTML='<button class="small">Download</button>';row.appendChild(a)}
+  const d=document.createElement('button');d.className='small danger';d.textContent='Delete';
+  d.onclick=async()=>{if(!confirm('Delete '+it.name+(it.dir?' and everything in it':'')+'?'))return;await post('/api/delete?path='+encodeURIComponent(p));list()};
+  row.appendChild(d);$('list').appendChild(row)}
+}
+function upload(files){
+ const q=[...files];let i=0;
+ const next=()=>{if(i>=q.length){$('prog').textContent=q.length?'Done.':'';list();return}
+  const f=q[i++],fd=new FormData();fd.append('file',f,f.name);
+  const x=new XMLHttpRequest();x.open('POST','/api/upload?dir='+encodeURIComponent(dir));
+  x.upload.onprogress=e=>{$('prog').textContent=`${f.name}: ${Math.round(e.loaded/e.total*100)}% (${i} of ${q.length})`};
+  x.onload=()=>{if(x.status!==200)$('prog').textContent=f.name+': failed';next()};
+  x.onerror=()=>{$('prog').textContent=f.name+': connection lost';};
+  x.send(fd)};
+ next();
+}
+async function pollLog(){
+ try{const r=await fetch('/api/log?since='+logSince);const t=await r.text();
+  logSince=+r.headers.get('X-Log-Total')||logSince;
+  if(t){const l=$('log');l.textContent+=t;if(l.textContent.length>60000)l.textContent=l.textContent.slice(-40000);
+   if($('follow').checked)l.scrollTop=l.scrollHeight}}catch(e){}
+}
+$('stop').onclick=async()=>{await post('/api/stop');setTimeout(status,300)};
+$('vol').oninput=e=>{const v=-e.target.value;$('volV').textContent=(v?'−':'')+v+' dB'};
+$('vol').onchange=e=>post('/api/volume?down='+(-e.target.value));
+$('restart').onclick=()=>{if(confirm('Restart the Yoto?'))post('/api/restart')};
+$('safe').onclick=()=>{if(confirm('Restart into safe mode? (WiFi, updates and this page only)'))post('/api/safemode')};
+$('off').onclick=()=>{if(confirm('Switch the Yoto off? (Only works on battery.)'))post('/api/poweroff')};
+$('up').onclick=()=>{if(dir!=='/'){dir=dir.slice(0,dir.lastIndexOf('/'))||'/';list()}};
+$('mk').onclick=async()=>{const n=prompt('Folder name');if(n){await post('/api/mkdir?path='+encodeURIComponent(join(dir,n)));list()}};
+$('refresh').onclick=list;
+$('file').onchange=e=>upload(e.target.files);
+const dz=$('drop');
+['dragenter','dragover'].forEach(t=>dz.addEventListener(t,e=>{e.preventDefault();dz.classList.add('on')}));
+['dragleave','drop'].forEach(t=>dz.addEventListener(t,e=>{e.preventDefault();dz.classList.remove('on')}));
+dz.addEventListener('drop',e=>upload(e.dataTransfer.files));
+$('wifiForm').onsubmit=async e=>{e.preventDefault();const r=await fetch('/api/wifi',{method:'POST',body:new URLSearchParams(new FormData(e.target))});alert(await r.text())};
+fetch('/api/networks').then(r=>r.json()).then(a=>{for(const n of a){const o=document.createElement('option');o.value=n;$('nets').appendChild(o)}}).catch(()=>{});
+status();list();pollLog();setInterval(status,4000);setInterval(pollLog,1000);
+</script></body></html>)HTML";

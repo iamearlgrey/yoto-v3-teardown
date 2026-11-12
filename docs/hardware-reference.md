@@ -124,14 +124,14 @@ The config names expander pins IOX.\<port\>.\<bit\>, counting four 8-bit ports a
 | --- | --- | --- |
 | IOX.0.0 | Qi I2C interrupt | Output per config, unexpected |
 | IOX.0.1 | RTC interrupt | Input |
-| IOX.0.4 | Right encoder push | Input |
-| IOX.0.5 | Left encoder push | Input |
+| IOX.0.4 | Right encoder push, reads 0 when pressed [Board] | Input |
+| IOX.0.5 | Left encoder push, reads 0 when pressed [Board] | Input |
 | IOX.0.6 | Battery gauge alert | Input |
 | IOX.0.7 | Qi status, active low | Input |
 | IOX.1.0 | USB VBUS status, active low | Input |
 | IOX.1.1 | Headphone detect | Input |
 | IOX.1.2 | Tilt indicator | Input |
-| IOX.1.3 | Power button | Input |
+| IOX.1.3 | Power button, reads 0 when pressed [Board] | Input |
 | IOX.1.4 | Charger status | Input |
 | IOX.2.0–2.3 | Display LED driver chip selects | Output, high |
 | IOX.2.4 | **Speaker amp control** | Output, high |
@@ -150,7 +150,17 @@ Stock startup values (write outputs before directions so pins don't glitch):
 | 0x20 | 0xFF | 0xFF | 0xFE | 0xFF |
 | 0x21 | 0x5F | 0xDF | 0x00 | 0xD4 |
 
-In direction registers, 1 = input and 0 = output. Pull-ups are off.
+In direction registers, 1 = input and 0 = output. Pull-ups are off. Input registers are 0x00 (p0) and 0x01 (p1) on each chip.
+
+### Power off
+
+Tested on battery, Nov 12. [Board]
+
+- Clearing IOX.3.1 (the power hold) by itself does **not** cut power. Three tries, the board stayed on.
+- This works: power down the amps, wait for the power button to be released, set every expander pin to input except IOX.3.0 (level converter) and IOX.3.1 (direction registers 0x20: 0xFF 0xFF, 0x21: 0xFF 0xFC), then clear IOX.3.1 (0x21 output register 0x03 = 0xDD). This follows the order in open-yoto's notes on Yoto's shutdown code ("Setting IOX pins to inputs … except for VIN_HOLD", then "Unlatching VIN_HOLD").
+- Yoto's firmware only releases the hold on battery. With USB-C in, the board stays powered whatever the firmware does.
+
+Which of the newly released outputs was keeping the board on is untested. [Inferred]
 
 ## Storage
 
@@ -181,7 +191,7 @@ Everything inside uses plug-in cables, so the player comes apart and goes back t
 | NFC, left edge | 2 | NFC antenna board under the card slot | [Board] |
 | P201, bottom | 7 | Qi receiver at the base | [Board] |
 | P303, bottom | 6 | Night-light LEDs around the rear edge | [Board] |
-| ESP32 antenna socket | Coax | External Wi-Fi antenna cable, routed under a panel hook | [Board] |
+| ESP32 antenna socket | Coax | External Wi-Fi antenna cable, routed under a panel hook. Easy to leave unplugged after a teardown: without it, my router read −88 dBm instead of −52 dBm and WiFi logins failed. A socket usually means the -IE (external antenna) module variant; the can label isn't rechecked yet | [Board] |
 
 The V3-E config lists a different battery (EVE-LJDX90X-4900) than the fitted A&S cell, which is the plain V3 entry's part. The CW2015 gauge is also the plain V3 entry's, so this board mixes parts from both entries. Everything else tested from the V3-E entry has worked, including the amps, expanders and I2S pins. [Board]
 
