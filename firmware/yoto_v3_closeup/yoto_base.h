@@ -113,6 +113,7 @@ bool setupExpanders() {
 }  // namespace yoto
 
 #include "yoto_light.h"               // night light ring: status colours
+#include "yoto_display.h"             // 16x16 LED matrix
 
 namespace yoto {
 
@@ -246,6 +247,7 @@ void powerOff() {
   for (int i = 0; i < 100 && powerButtonDown(); i++) delay(100);   // up to 10 s for release
   log("Switching off.\n");
   light::blackout();
+  display::sleep();
   saveLog(true);
   delay(100);
   write8(IOX_A, 0x06, 0xFF);        // port0 all inputs
@@ -748,6 +750,41 @@ void setupRoutes() {
     server.send(200, "text/plain", "OK");
   });
   server.on("/api/light/test", HTTP_POST, []() { light::channelTest(); server.send(200, "text/plain", "OK"); });
+  // Display test tools: /api/disp?show=chip|addr|block|ramp|all|off&chip=&addr=(hex)&block=
+  server.on("/api/disp", HTTP_POST, []() {
+    String s = server.arg("show");
+    int chip = server.arg("chip").toInt();
+    int addr = (int)strtol(server.arg("addr").c_str(), nullptr, 16);
+    int block = server.arg("block").toInt();
+    if (s == "chip") display::showChip(chip);
+    else if (s == "addr") display::showAddr(chip, addr);
+    else if (s == "block") display::showBlock(chip, block);
+    else if (s == "ramp") display::showRamp(chip);
+    else if (s == "pattern") display::showPattern();
+    else if (s == "all") display::showAll(true);
+    else display::showAll(false);
+    server.send(200, "text/plain", "OK");
+  });
+  // A whole frame from the drawing grid: body = 256 x "rrggbb", row by row
+  server.on("/api/frame", HTTP_POST, []() {
+    bool ok = display::frameFromHex(server.arg("plain"));
+    server.send(ok ? 200 : 400, "text/plain", ok ? "OK" : "Need 256 rrggbb values");
+  });
+  server.on("/api/map/start", HTTP_POST, []() { display::mapStart(server.arg("chip").toInt()); server.send(200, "application/json", display::mapState()); });
+  server.on("/api/map/record", HTTP_POST, []() {
+    String c = server.arg("c");
+    int colour = c == "r" ? 0 : c == "g" ? 1 : c == "b" ? 2 : -1;
+    display::mapRecord(server.arg("x").toInt(), server.arg("y").toInt(), colour);
+    server.send(200, "application/json", display::mapState());
+  });
+  server.on("/api/map/skip", HTTP_POST, []() { display::mapSkipBlock(); server.send(200, "application/json", display::mapState()); });
+  server.on("/api/map/back", HTTP_POST, []() { display::mapBack(); server.send(200, "application/json", display::mapState()); });
+  server.on("/api/map/state", HTTP_GET, []() { server.send(200, "application/json", display::mapState()); });
+  server.on("/api/disp/bright", HTTP_POST, []() {
+    display::setBrightness((uint8_t)constrain(server.arg("v").toInt(), 0, 64));
+    log("Display brightness %d/64\n", display::brightness);
+    server.send(200, "text/plain", "OK");
+  });
   server.onNotFound([]() { server.send(404, "text/plain", "Not found"); });
 }
 
@@ -798,6 +835,7 @@ bool begin() {
   log("Last restart: %s\n", resetReasonText());
   log("Expanders: %s\n", ioxOk ? "OK" : "WRITE FAILED");
   if (light::begin()) light::startupGlow();   // amber breathing while starting
+  display::begin();
 
   // Safe mode: requested before a restart, or a knob held right at power-up.
   // (A knob held for 1 s in the first 6 s also works; see pollInputs.) Pressed reads 0.

@@ -102,6 +102,50 @@ label{font-size:12px;color:var(--dim)}
   <p class="hint">Safe mode: hold a knob while switching on, or use the button above. Power off: hold the power button 3 s, then let go. The last session's log is saved as cal_log_prev.txt on the card.</p>
  </section>
  <section class="card wide">
+  <h2>Display</h2>
+  <div class="row">
+   <input type="color" id="pc" value="#ffb340" style="width:44px;height:32px;padding:0;border:1px solid var(--line);border-radius:4px;background:none">
+   <button class="small" id="pErase">Eraser</button>
+   <button class="small" id="pFill">Fill</button>
+   <button class="small" id="pClear">Clear</button>
+   <button class="small" id="pPattern">Test pattern</button>
+  </div>
+  <div id="pGrid" style="display:grid;grid-template-columns:repeat(16,1fr);gap:2px;max-width:440px;margin-top:10px;touch-action:none;user-select:none"></div>
+  <div class="vol"><span>Display brightness</span><span id="dbV">16/64</span></div>
+  <input type="range" id="db" min="1" max="64" value="16">
+  <p class="hint">Draw by clicking or dragging; the Yoto updates as you go. Test pattern: top row white, corners red (top left), green (top right), blue (bottom left), white (bottom right), a rainbow left to right, dim at the top to bright at the bottom.</p>
+  <details style="margin-top:14px"><summary style="cursor:pointer;color:var(--amber);font:12px var(--mono)">Mapping tools</summary>
+  <div class="row" style="margin-top:10px">
+   <span class="s" style="font:12px var(--mono);color:var(--dim)">Whole chip</span>
+   <button class="small" data-chip="0">0</button><button class="small" data-chip="1">1</button>
+   <button class="small" data-chip="2">2</button><button class="small" data-chip="3">3</button>
+   <button class="small" id="dAll">All on</button><button class="small" id="dOff">All off</button>
+  </div>
+  <div class="row" style="margin-top:10px">
+   <label>chip <input type="text" id="dChip" value="0" style="width:44px"></label>
+   <label>address (hex) <input type="text" id="dAddr" value="20" style="width:44px"></label>
+   <label>block <input type="text" id="dBlock" value="1" style="width:44px"></label>
+   <button class="small" id="dDot">Address</button>
+   <button class="small" id="dBlk">Block</button>
+   <button class="small" id="dRamp">Ramp</button>
+  </div>
+  <p class="hint">Each chip has memory addresses 00–FB (hex), one LED each, in 8 blocks of 20 (hex). Block 0 (00–1F) lights nothing on this board. "Whole chip" shows which band a chip covers; Address lights one LED; Block lights 32 addresses; Ramp grades brightness within each block. Starts dim on purpose.</p>
+  <h2 style="margin-top:18px">Map a chip</h2>
+  <div class="row">
+   <label>chip <input type="text" id="mChip" value="0" style="width:44px"></label>
+   <button class="small primary" id="mStart">Start mapping</button>
+   <span id="mProg" style="font:12px var(--mono);color:var(--amber)"></span>
+  </div>
+  <p class="hint">One dot lights at a time. Click the pixel below that matches it, then its colour (or press R, G, B, N on the keyboard). Found pixels fill in as you go. Progress saves to the SD card.</p>
+  <div id="mGrid" style="display:grid;grid-template-columns:repeat(16,1fr);gap:2px;max-width:440px;margin-top:6px"></div>
+  <div class="row" style="margin-top:10px">
+   <button id="mR" style="background:#7a1f16">Red</button><button id="mG" style="background:#1d5c33">Green</button>
+   <button id="mB" style="background:#1d3f75">Blue</button><button id="mN">Nothing lit</button>
+   <button id="mSkip">Rest of this block is dark</button><button id="mBack">Back</button>
+  </div>
+  </details>
+ </section>
+ <section class="card wide">
   <h2>SD card</h2>
   <div class="row">
    <button id="up" class="small">Up</button>
@@ -197,6 +241,55 @@ $('loff').onclick=()=>post('/api/light/off');
 $('ltest').onclick=()=>post('/api/light/test');
 $('ll').oninput=e=>{$('llV').textContent=e.target.value};
 $('ll').onchange=lightSet;
+const disp=(show,extra='')=>post('/api/disp?show='+show+extra);
+const dsel=()=>'&chip='+$('dChip').value+'&addr='+$('dAddr').value+'&block='+$('dBlock').value;
+document.querySelectorAll('[data-chip]').forEach(b=>b.onclick=()=>{$('dChip').value=b.dataset.chip;disp('chip','&chip='+b.dataset.chip)});
+$('dAll').onclick=()=>disp('all');$('dOff').onclick=()=>disp('off');
+$('dDot').onclick=()=>disp('addr',dsel());$('dBlk').onclick=()=>disp('block',dsel());
+$('dRamp').onclick=()=>disp('ramp',dsel());
+$('db').oninput=e=>{$('dbV').textContent=e.target.value+'/64'};
+$('db').onchange=e=>post('/api/disp/bright?v='+e.target.value);
+// ---- drawing grid ----
+const frame=Array(256).fill('000000');const pcells=[];let painting=false,erase=false,sendT=null;
+const sendFrame=()=>{sendT=null;fetch('/api/frame',{method:'POST',body:frame.join('')})};
+const queueSend=()=>{if(!sendT)sendT=setTimeout(sendFrame,80)};
+const paintCell=(i)=>{const col=erase?'000000':$('pc').value.slice(1);frame[i]=col;pcells[i].style.background='#'+(col==='000000'?'0c0d0a':col);queueSend()};
+for(let i=0;i<256;i++){const c=document.createElement('div');
+ c.style.cssText='aspect-ratio:1;background:#0c0d0a;border:1px solid var(--line);border-radius:2px;cursor:crosshair';
+ c.onpointerdown=e=>{painting=true;c.releasePointerCapture&&c.releasePointerCapture(e.pointerId);paintCell(i)};
+ c.onpointerenter=()=>{if(painting)paintCell(i)};
+ pcells.push(c);$('pGrid').appendChild(c)}
+document.addEventListener('pointerup',()=>{painting=false});
+$('pErase').onclick=()=>{erase=!erase;$('pErase').textContent=erase?'Eraser (on)':'Eraser'};
+$('pc').oninput=()=>{erase=false;$('pErase').textContent='Eraser'};
+$('pClear').onclick=()=>{frame.fill('000000');pcells.forEach(c=>c.style.background='#0c0d0a');sendFrame()};
+$('pFill').onclick=()=>{const col=$('pc').value.slice(1);frame.fill(col);pcells.forEach(c=>c.style.background='#'+col);sendFrame()};
+$('pPattern').onclick=()=>disp('pattern');
+// ---- click-mapping ----
+let mSel=null;const cells=[];
+for(let y=0;y<16;y++)for(let x=0;x<16;x++){const c=document.createElement('div');
+ c.style.cssText='aspect-ratio:1;background:#0c0d0a;border:1px solid var(--line);border-radius:2px;cursor:pointer';
+ c.onclick=()=>{if(mSel)mSel.style.outline='';mSel=c;c.style.outline='2px solid var(--amber)';c.dataset.x=x;c.dataset.y=y};
+ cells.push(c);$('mGrid').appendChild(c)}
+function mShow(s){
+ if(s.chip<0){$('mProg').textContent='';return}
+ const h=s.addr.toString(16).toUpperCase().padStart(2,'0');
+ $('mProg').textContent=s.addr>=s.total?'Done: chip '+s.chip+' saved':'Chip '+s.chip+' · address '+h+' · block '+Math.floor(s.addr/32)+' ('+s.addr+' of '+s.total+')';
+ const mix=Array(256).fill(0).map(()=>[0,0,0]);
+ s.found.forEach(([x,y,c])=>{mix[y*16+x][c]=1});
+ cells.forEach((c,i)=>{const m=mix[i];c.style.background=(m[0]||m[1]||m[2])?`rgb(${m[0]?230:25},${m[1]?200:25},${m[2]?230:25})`:'#0c0d0a'});
+}
+const mPost=async u=>{const r=await post(u);mShow(await r.json())};
+function mRec(col){
+ if(col!=='n'&&!mSel){alert('Click the pixel that lit up first.');return}
+ const q=col==='n'?'':'&x='+mSel.dataset.x+'&y='+mSel.dataset.y;
+ if(mSel){mSel.style.outline='';mSel=null}
+ mPost('/api/map/record?c='+col+q)}
+$('mStart').onclick=()=>mPost('/api/map/start?chip='+$('mChip').value);
+$('mR').onclick=()=>mRec('r');$('mG').onclick=()=>mRec('g');$('mB').onclick=()=>mRec('b');$('mN').onclick=()=>mRec('n');
+$('mSkip').onclick=()=>mPost('/api/map/skip');$('mBack').onclick=()=>mPost('/api/map/back');
+document.addEventListener('keydown',e=>{if(e.target.tagName==='INPUT')return;const k=e.key.toLowerCase();if('rgbn'.includes(k)&&k.length===1)mRec(k)});
+fetch('/api/map/state').then(r=>r.json()).then(mShow).catch(()=>{});
 const balQ=()=>'/api/light/balance?r='+$('br').value+'&g='+$('bg').value+'&b='+$('bb').value;
 ['br','bg','bb'].forEach(id=>{$(id).oninput=e=>{$(id+'V').textContent=e.target.value+'%';post(balQ())}});
 $('lwhite').onclick=()=>post('/api/light?color=ffffff&level='+$('ll').value);

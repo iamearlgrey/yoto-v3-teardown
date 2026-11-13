@@ -197,6 +197,45 @@ AW2028H at 0x65, LED board on P303. Tested Nov 12. [Board], registers [Datasheet
 - The LEDs lean green: yellow comes out lime. By eye against a white wall, white needed red 100 %, green 33 %, blue 27 %, with a 2.2 gamma curve. Your LEDs may differ.
 - Yoto's firmware drives it in sync RGB mode instead (open-yoto's notes: "SYNC RGB mode, setting PWM1 to max (0xFF) and ILED1/2/3" for colour).
 
+## Display
+
+16×16 full-colour LED matrix on the reverse of the main board: four HT16D35A drivers (U400, U500, U600, U700), 768 LEDs. Tested Nov 12. [Board], commands [Datasheet]
+
+**Wiring.** 3-wire SPI, write only: data GPIO22, clock GPIO23, mode 0. 1 MHz with about 3 µs between bytes worked. Chip selects are IOX.2.0–2.3 (expander 0x21, output register 0x02, bits 0–3, active low). GPIO26 is listed as MISO in Yoto's config but is the left knob, so leave it alone.
+
+**Bands.** Chip *c* (select bit *c*) lights rows 4*c* to 4*c*+3, all 16 columns.
+
+**Start-up, per chip** (each command in its own chip-select frame):
+
+| Command | Data | Meaning |
+| --- | --- | --- |
+| 0xCC | | Software reset |
+| 0x80 0x00 | 252 × 0x00 | Clear display RAM |
+| 0x41 | 0xFF | COM outputs on |
+| 0x42 | 0xFF 0xFF 0xFF 0x0F | ROW outputs on |
+| 0x43 | 0x00 | No blinking |
+| 0x31 | 0x00 | Gray (PWM) mode: 64 levels per LED |
+| 0x32 | 0x07 | Scan all COM lines |
+| 0x33, 0x34, 0x38 | 0x00 | Defaults |
+| 0x36 | 0x07 | Constant current, a safe middle setting |
+| 0x37 | 0–63 | Global brightness (16 used) |
+| 0x35 | 0x02, then 0x03 | Oscillator on, then display on |
+
+**Memory layout.** Write 0x80, a start address, then the data; each byte is one LED's brightness (0–63). The board doesn't follow the datasheet's "COM × 0x20 + ROW" layout. The LEDs sit in runs of 24 addresses (8 pixels × red, green, blue), one run every 28 addresses starting at 0x1C. The last 4 addresses of each 28 aren't connected, and 0x00–0x1B is dark.
+
+For pixel (*x*, *y*), *x* 0–15 left to right and *y* 0–15 top to bottom:
+
+```
+chip = y / 4
+j    = (y % 4) * 2 + (x / 8)
+run  = (j == 0) ? 8 : j
+red  = 28 * run + (x % 8) * 3      // green = red + 1, blue = red + 2
+```
+
+- Filling all 252 addresses as if they were the datasheet layout gives a stair-step of red, blue, yellow and dark pixels: the unconnected bytes push everything out of line.
+- open-yoto drives this display on/off only; gray mode works and gives smooth fades.
+- The LEDs' safe maximum current and their colour balance are untested.
+
 ## Storage
 
 **microSD** (GPIO2/14/15), about 171 MB used on my card. It holds cached card audio in randomly named folders, plus card data, icons, app settings, and a resume record. Settings include schedules, brightness, volume caps, and a 1-hour auto shutdown.
