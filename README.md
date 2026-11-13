@@ -83,7 +83,7 @@ The first stereo version stuttered during the sweep: computing double-precision 
 | Web page | Upload to the SD card, download, delete, and play WAV files in stereo |
 | Buttons | All read 0 when pressed: left knob IOX.0.5, right knob IOX.0.4, power IOX.1.3 |
 | Power off on battery | Releasing the power hold (IOX.3.1) alone didn't cut power. It works when the other expander pins are made inputs first, as Yoto's firmware does |
-| USB-C while off | Plugging in switches the player on, and it charges while running |
+| USB-C while off | Plugging in switches the player on, and it charges while running. Right after plug-in the charger's input type (REG08 bits 7:5) still reads "none" while it identifies the source; its power-good flag (bit 2) is immediate |
 | Knobs | Both work, decoded from pin-change interrupts at 4 counts per click: left on GPIO26/13, right on GPIO27/4 |
 | Static | The amps hiss when idle and in quiet passages. Two causes, two fixes. **Boost mode:** the amps power up with their boost converter in mode 2 (BSTCTRL2 0x61 bits 6:4), which the datasheet lists as reserved. Of the documented modes, smart boost 2 (6) was quietest by ear; mode 2 and force boost hissed. **Idle:** muting alone (PWMCTRL 0x08 bit 0) doesn't stop the boost, so once it had kicked in at about −9 dB the static stayed. Powering the amplifier stage down (SYSCTRL 0x04 bit 1) 1.5 s after the last sound, and waiting for it to report switching before unmuting, removes it with no clipped starts |
 | Night light | AW2028H at 0x65 confirmed (ID 0xB1). LED1 red, LED2 green, LED3 blue. Bare RGB LEDs lean green: by eye, white needed red 100 %, green 33 %, blue 27 % |
@@ -110,7 +110,8 @@ Back up first: see [`docs/download-mode.md`](docs/download-mode.md). The sketche
 | Next / previous file | Turn the right knob. It moves through the WAVs in the folder of the last file played, or `/music` if nothing has played yet |
 | Play / stop | Press the right knob |
 | Power off | Hold the power button 3 s, wait for the shutdown sound, let go. Only on battery: with USB-C in, the board stays powered |
-| Charging mode | If plugging in USB-C switched it on, the amps and sounds stay off until you press a knob or the power button (not yet tested) |
+| Charging mode | If plugging in USB-C switched it on, it breathes green with the amps and sounds off. Press a knob or the power button to wake it. Unplugging before then switches it back off |
+| Plug / unplug while on | One green pulse when USB-C goes in, one amber pulse when it comes out |
 | Night light | Colour picker, brightness and colour balance on the web page. Status colours: amber breathing while starting, blue while setting up WiFi or updating, red in safe mode, slow green in charging mode, amber fade at power off |
 | See what happened last time | `cal_log_prev.txt` on the SD card, and the "Last restart" line at the top of the log |
 

@@ -480,6 +480,7 @@ void earlyStart() {
 bool ensureAudio() {
   if (!audioTried) {
     log("Waking from charging mode.\n");
+    yoto::chargingMode = false;
     yoto::light::off(500);
     startAudio();
     return false;                    // the start-up sound is the response to this press

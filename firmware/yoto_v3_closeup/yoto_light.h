@@ -25,8 +25,12 @@ uint8_t level = 0x80;             // overall brightness (ILED), 0-255 of the 18 
 SemaphoreHandle_t lock = nullptr;
 
 // What the light is doing. All colours 0-255 per channel, before gamma.
-enum Mode { STEADY, FADE, BREATHE, TEST };
+enum Mode { STEADY, FADE, BREATHE, TEST, PULSE };
 Mode mode = STEADY;
+// A one-off pulse remembers what the light was doing, and goes back to it after.
+Mode savedMode = STEADY;
+uint8_t savedTo[3] = {0, 0, 0}, pulseColour[3] = {0, 0, 0};
+uint32_t savedSpan = 1;
 uint8_t from[3] = {0, 0, 0}, to[3] = {0, 0, 0}, now[3] = {0, 0, 0};
 uint32_t startMs = 0, spanMs = 1;
 uint8_t written[3] = {1, 1, 1};   // forces the first write
@@ -85,6 +89,19 @@ void task(void *) {
       case BREATHE: {
         float f = (1.0f - cosf(2.0f * PI * (float)(t % spanMs) / spanMs)) * 0.5f;
         for (int i = 0; i < 3; i++) now[i] = (uint8_t)(to[i] * (0.08f + 0.92f * f));
+        break;
+      }
+      case PULSE: {                     // 0.4 s up, 0.6 s down, then back to before
+        float f = t < 400 ? t / 400.0f : 1.0f - (t - 400) / 600.0f;
+        if (t >= 1000) {
+          memcpy(to, savedTo, 3);
+          spanMs = savedSpan;
+          startMs = millis();
+          mode = savedMode == FADE ? STEADY : savedMode;
+          memset(now, 0, 3);
+          break;
+        }
+        for (int i = 0; i < 3; i++) now[i] = (uint8_t)(pulseColour[i] * f);
         break;
       }
       case TEST: {
@@ -195,6 +212,21 @@ void breathe(uint8_t r, uint8_t g, uint8_t b, uint32_t periodMs) {
 }
 
 void setBrightness(uint8_t l) { if (ok) pendingLevel = max((uint8_t)1, l); }
+
+// One soft pulse of a colour, then the light carries on as before.
+void pulse(uint8_t r, uint8_t g, uint8_t b) {
+  if (!ok) return;
+  xSemaphoreTake(lock, portMAX_DELAY);
+  if (mode != TEST && mode != PULSE) {
+    savedMode = mode;
+    memcpy(savedTo, to, 3);
+    savedSpan = spanMs;
+    pulseColour[0] = r; pulseColour[1] = g; pulseColour[2] = b;
+    startMs = millis();
+    mode = PULSE;
+  }
+  xSemaphoreGive(lock);
+}
 
 void channelTest() {
   if (!ok) return;

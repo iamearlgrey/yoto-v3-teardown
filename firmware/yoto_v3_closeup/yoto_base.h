@@ -45,6 +45,7 @@ const char *AP_NAME   = "CAL-Yoto-Setup";
 WebServer server(80);
 bool safeMode = false;
 bool wokeByUsb = false;            // switched on by plugging in USB-C, not by the power button
+bool chargingMode = false;         // still quiet after a USB-C switch-on; the app clears it on wake
 bool sdOk = false;
 bool apMode = false;
 void (*stopHook)() = nullptr;      // set by the app
@@ -204,9 +205,22 @@ void (*shutdownHook)() = nullptr;  // set by the app: power down amps etc.
 void (*goodbyeHook)() = nullptr;   // set by the app: play a sound before switching off
 void (*earlyHook)() = nullptr;     // set by the app before begin(): runs before WiFi (not in safe mode)
 
-bool usbPresent() {
+// USB-C power, by any of three signals. The charger's input type (REG08 bits 7:5)
+// stays 0 for a moment after plug-in while it works out what's connected, so also
+// check its power-good flag (REG08 bit 2) and the board's USB detect line (IOX.1.0,
+// low when USB power is present, per the V3-E config).
+// useLine = false ignores the detect line, whose meaning isn't confirmed on this board
+// yet; power off uses that, so a misread line can never stop it switching off.
+bool usbPresent(bool report = false, bool useLine = true) {
   int st = read8(CHARGER, 0x08);
-  return st >= 0 && ((st >> 5) & 7) != 0;
+  int p1 = read8(IOX_A, 0x01);
+  bool type = st >= 0 && ((st >> 5) & 7) != 0;
+  bool good = st >= 0 && (st & 0x04);
+  bool line = useLine && p1 >= 0 && !(p1 & 0x01);
+  if (report)
+    log("USB check: charger input type %s, power good %s, USB detect line %s\n", type ? "yes" : "no",
+        good ? "yes" : "no", line ? "yes" : "no");
+  return type || good || line;
 }
 
 bool powerButtonDown() {
@@ -219,7 +233,7 @@ bool powerButtonDown() {
 // (IOX.3.0), wait for the power button to be let go, then release VIN_HOLD.
 void powerOff() {
   log("Power off requested.\n");
-  if (usbPresent()) {
+  if (usbPresent(true, false)) {
     log("USB-C is connected, so the board stays powered. Unplug USB-C, then hold the power button again.\n");
     return;
   }
@@ -737,6 +751,40 @@ void setupRoutes() {
   server.onNotFound([]() { server.send(404, "text/plain", "Not found"); });
 }
 
+// In charging mode the Yoto was off before USB-C went in, so taking USB-C away
+// (for 2 s, to ride out a wobbly plug) switches it back off.
+uint32_t lastUnplugCheck = 0, unpluggedSince = 0;
+
+// Outside charging mode, plugging in gives one green pulse and unplugging one amber
+// pulse. A change has to last 1 s to count, so a wobbly plug doesn't flicker.
+int usbState = -1;                 // last settled state: 1 plugged in, 0 not, -1 unknown
+uint32_t usbChangeSince = 0;
+
+void pollChargingUnplug() {
+  if (millis() - lastUnplugCheck < 500) return;
+  lastUnplugCheck = millis();
+  bool usb = usbPresent(false, false);
+  if (!chargingMode) {
+    if (usbState < 0) { usbState = usb; return; }
+    if (usb == (bool)usbState) { usbChangeSince = 0; return; }
+    if (!usbChangeSince) { usbChangeSince = millis(); return; }
+    if (millis() - usbChangeSince < 1000) return;
+    usbState = usb;
+    usbChangeSince = 0;
+    log("USB-C %s.\n", usb ? "plugged in" : "unplugged");
+    if (usb) light::pulse(40, 255, 60);
+    else light::pulse(255, 150, 30);
+    return;
+  }
+  if (usb) { unpluggedSince = 0; return; }
+  if (!unpluggedSince) unpluggedSince = millis();
+  else if (millis() - unpluggedSince > 2000) {
+    log("USB-C unplugged in charging mode: switching back off.\n");
+    chargingMode = false;
+    powerOff();
+  }
+}
+
 // ---------- Start and run ----------
 bool begin() {
   Wire.begin(PIN_SDA, PIN_SCL, 100000);
@@ -778,8 +826,17 @@ bool begin() {
   pollBattery(true);
   log("Battery %.2f V, %s, %s\n", batteryVolts, inputState.c_str(), chargeState.c_str());
 
-  wokeByUsb = esp_reset_reason() == ESP_RST_POWERON && usbPresent() && !powerButtonDown();
-  if (wokeByUsb) log("Switched on by USB-C.\n");
+  {
+    esp_reset_reason_t why = esp_reset_reason();
+    bool usb = usbPresent(true);
+    bool button = powerButtonDown();
+    // Plugging in can also register as a brownout reset while the supply ramps up.
+    wokeByUsb = (why == ESP_RST_POWERON || why == ESP_RST_BROWNOUT) && usb && !button;
+    log("Switched on by: %s\n", wokeByUsb ? "USB-C (charging mode)" :
+        (why != ESP_RST_POWERON && why != ESP_RST_BROWNOUT) ? "restart" :
+        button ? "power button" : usb ? "USB-C, but a button was held" : "power button");
+  }
+  chargingMode = wokeByUsb && !safeMode;
   if (safeMode) light::safeModeGlow();       // red breathing for as long as safe mode lasts
   else if (wokeByUsb) light::chargingGlow(); // slow green breathing until woken
   setupKnobs();
@@ -808,6 +865,7 @@ void loop() {
     readyGlowEnd = 0;
     light::off(1500);
   }
+  pollChargingUnplug();
 }
 
 }  // namespace yoto
