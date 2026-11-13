@@ -70,13 +70,30 @@ void flushChip(int chip) {
   buf[0] = 0x80;
   buf[1] = 0x00;
   memcpy(buf + 2, ram[chip], RAM_BYTES);
+  // The chip skips the datasheet's unused 1Ch-1Fh gaps, so 28 bytes = one COM line
+  // and a 252-byte write runs past COM7 and wraps round to COM0 again: bytes 00h-1Bh
+  // and E0h-FBh both land on COM0 (row 0 of the band, left half). Sending the same
+  // data in both places stops that row going dark for a moment on every update,
+  // which showed as flicker in the left eye.
+  memcpy(buf + 2, ram[chip] + 0xE0, 28);
   send(chip, buf, sizeof(buf));
 }
+
+uint8_t sent[CHIPS][RAM_BYTES];   // what each chip was last sent
 
 void flush() {
   if (!ok) return;
   xSemaphoreTake(lock, portMAX_DELAY);
-  for (int c = 0; c < CHIPS; c++) flushChip(c);
+  for (int c = 0; c < CHIPS; c++) { flushChip(c); memcpy(sent[c], ram[c], RAM_BYTES); }
+  xSemaphoreGive(lock);
+}
+
+// Sends only the chips whose pixels changed since they were last sent (for animation).
+void flushChanged() {
+  if (!ok) return;
+  xSemaphoreTake(lock, portMAX_DELAY);
+  for (int c = 0; c < CHIPS; c++)
+    if (memcmp(sent[c], ram[c], RAM_BYTES)) { flushChip(c); memcpy(sent[c], ram[c], RAM_BYTES); }
   xSemaphoreGive(lock);
 }
 
@@ -104,6 +121,7 @@ bool begin() {
   lock = xSemaphoreCreateMutex();
   delay(2);
   clear();
+  memset(sent, 0, sizeof(sent));
   for (int c = 0; c < CHIPS; c++) {
     cmd(c, 0xCC);                    // reset
     delay(1);
@@ -133,6 +151,7 @@ void sleep() {
   if (!ok) return;
   xSemaphoreTake(lock, portMAX_DELAY);
   for (int c = 0; c < CHIPS; c++) cmd(c, 0x35, 0x00);
+  ok = false;                        // nothing more gets sent
   xSemaphoreGive(lock);
 }
 
@@ -142,8 +161,7 @@ void sleep() {
 // last 4 of each 28 are unused, and 00h-1Bh is dark. Within a chip's band of 4
 // rows: run 1 = row 0 right half, 2 = row 1 left, 3 = row 1 right, 4 = row 2 left,
 // 5 = row 2 right, 6 = row 3 left, 7 = row 3 right, 8 = row 0 left.
-// Chip c covers rows 4c to 4c+3 (assumed from the whole-chip test; check with the
-// test pattern).
+// Chip c covers rows 4c to 4c+3 (confirmed with the test pattern, Nov 12).
 uint8_t gamma63[256];
 
 void buildGamma() {

@@ -114,6 +114,7 @@ bool setupExpanders() {
 
 #include "yoto_light.h"               // night light ring: status colours
 #include "yoto_display.h"             // 16x16 LED matrix
+#include "yoto_face.h"                // CAL's spirit-level eyes on the matrix
 
 namespace yoto {
 
@@ -752,6 +753,7 @@ void setupRoutes() {
   server.on("/api/light/test", HTTP_POST, []() { light::channelTest(); server.send(200, "text/plain", "OK"); });
   // Display test tools: /api/disp?show=chip|addr|block|ramp|all|off&chip=&addr=(hex)&block=
   server.on("/api/disp", HTTP_POST, []() {
+    face::manual = true;
     String s = server.arg("show");
     int chip = server.arg("chip").toInt();
     int addr = (int)strtol(server.arg("addr").c_str(), nullptr, 16);
@@ -767,10 +769,11 @@ void setupRoutes() {
   });
   // A whole frame from the drawing grid: body = 256 x "rrggbb", row by row
   server.on("/api/frame", HTTP_POST, []() {
+    face::manual = true;
     bool ok = display::frameFromHex(server.arg("plain"));
     server.send(ok ? 200 : 400, "text/plain", ok ? "OK" : "Need 256 rrggbb values");
   });
-  server.on("/api/map/start", HTTP_POST, []() { display::mapStart(server.arg("chip").toInt()); server.send(200, "application/json", display::mapState()); });
+  server.on("/api/map/start", HTTP_POST, []() { face::manual = true; display::mapStart(server.arg("chip").toInt()); server.send(200, "application/json", display::mapState()); });
   server.on("/api/map/record", HTTP_POST, []() {
     String c = server.arg("c");
     int colour = c == "r" ? 0 : c == "g" ? 1 : c == "b" ? 2 : -1;
@@ -785,6 +788,19 @@ void setupRoutes() {
     log("Display brightness %d/64\n", display::brightness);
     server.send(200, "text/plain", "OK");
   });
+  // Face: /api/face?state=idle|listening|...&auto=0|1, /api/face/cal?step=level|right
+  server.on("/api/face", HTTP_POST, []() {
+    if (server.hasArg("auto")) face::autoMode = server.arg("auto") == "1";
+    if (server.hasArg("state")) {
+      int st = face::stateFromName(server.arg("state"));
+      if (st < 0) { server.send(400, "text/plain", "Unknown state"); return; }
+      if (!face::running) face::begin();
+      face::set((face::State)st);
+    }
+    server.send(200, "application/json", face::json());
+  });
+  server.on("/api/face", HTTP_GET, []() { server.send(200, "application/json", face::json()); });
+  server.on("/api/face/cal", HTTP_POST, []() { server.send(200, "text/plain", face::calibrate(server.arg("step"))); });
   server.onNotFound([]() { server.send(404, "text/plain", "Not found"); });
 }
 

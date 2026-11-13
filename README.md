@@ -15,7 +15,7 @@ Teardown notes for the full-size Yoto Player 3rd generation, plus Arduino sketch
 
 | Path | What it is |
 | --- | --- |
-| [`firmware/yoto_v3_closeup/`](firmware/yoto_v3_closeup/) | **Start here.** Stereo WAV player with both knobs, the night light (status colours and colour picker), the 16×16 full-colour display (drawing grid on the web page), WiFi updates, a web page (log, SD files, battery), safe mode, power off, and start-up and shutdown sounds. `yoto_base.h`, `yoto_light.h` and `yoto_display.h` are reusable for your own sketches |
+| [`firmware/yoto_v3_closeup/`](firmware/yoto_v3_closeup/) | **Start here.** Stereo WAV player with both knobs, the night light (status colours and colour picker), the 16×16 full-colour display (CAL's animated spirit-level eyes, which follow the tilt sensor, plus a drawing grid), WiFi updates, a web page (log, SD files, battery), safe mode, power off, and start-up and shutdown sounds. `yoto_base.h`, `yoto_light.h`, `yoto_display.h` and `yoto_face.h` are reusable for your own sketches |
 | [`firmware/yoto_v3_amp_test/`](firmware/yoto_v3_amp_test/) | Arduino sketch that wakes both amps and beeps |
 | [`firmware/yoto_v3_stereo/`](firmware/yoto_v3_stereo/) | True stereo: each amp plays its own channel, with a left-to-right sweep |
 | [`firmware/yoto_v3_left_right/`](firmware/yoto_v3_left_right/) | Beeps each amp alone, to tell left from right |
@@ -87,7 +87,7 @@ The first stereo version stuttered during the sweep: computing double-precision 
 | Knobs | Both work, decoded from pin-change interrupts at 4 counts per click: left on GPIO26/13, right on GPIO27/4 |
 | Static | The amps hiss when idle and in quiet passages. Two causes, two fixes. **Boost mode:** the amps power up with their boost converter in mode 2 (BSTCTRL2 0x61 bits 6:4), which the datasheet lists as reserved. Of the documented modes, smart boost 2 (6) was quietest by ear; mode 2 and force boost hissed. **Idle:** muting alone (PWMCTRL 0x08 bit 0) doesn't stop the boost, so once it had kicked in at about −9 dB the static stayed. Powering the amplifier stage down (SYSCTRL 0x04 bit 1) 1.5 s after the last sound, and waiting for it to report switching before unmuting, removes it with no clipped starts |
 | Night light | AW2028H at 0x65 confirmed (ID 0xB1). LED1 red, LED2 green, LED3 blue. Bare RGB LEDs lean green: by eye, white needed red 100 %, green 33 %, blue 27 % |
-| Display | The 16×16 matrix is **full colour** (an R, G and B LED per pixel), on four HT16D35A chips, each lighting a band 16 wide × 4 tall. 64 brightness levels per LED. Its memory layout doesn't match the HT16D35A datasheet; I mapped it by lighting one address at a time. Layout and formula in the hardware reference |
+| Display | The 16×16 matrix is **full colour** (an R, G and B LED per pixel), on four HT16D35A chips, each lighting a band 16 wide × 4 tall. 64 brightness levels per LED. The chip skips the datasheet's unused addresses, so each COM line is 28 bytes in the write; a longer write wraps round and caused flicker. Layout and formula in the hardware reference |
 
 Details in [`docs/hardware-reference.md`](docs/hardware-reference.md).
 
@@ -114,6 +114,7 @@ Back up first: see [`docs/download-mode.md`](docs/download-mode.md). The sketche
 | Charging mode | If plugging in USB-C switched it on, it breathes green with the amps and sounds off. Press a knob or the power button to wake it. Unplugging before then switches it back off |
 | Plug / unplug while on | One green pulse when USB-C goes in, one amber pulse when it comes out |
 | Night light | Colour picker, brightness and colour balance on the web page. Status colours: amber breathing while starting, blue while setting up WiFi or updating, red in safe mode, slow green in charging mode, amber fade at power off |
+| Face | CAL's eyes are two little spirit levels; the bubbles are the pupils and drift to the high side when you tip the Yoto (LIS2DH12 accelerometer, calibrated once from the web page). Eight expressions: idle, listening, thinking, speaking, pleased, indignant, nostalgic, asleep. Speaking follows the sound level |
 | Display | Draw on the 16×16 grid on the web page (colour picker, eraser, fill, clear), or press Test pattern. Code can call `yoto::display::pixel(x, y, r, g, b)` then `flush()`, or post 256 `rrggbb` values to `/api/frame` |
 | See what happened last time | `cal_log_prev.txt` on the SD card, and the "Last restart" line at the top of the log |
 

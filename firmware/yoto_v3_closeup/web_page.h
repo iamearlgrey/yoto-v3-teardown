@@ -102,6 +102,24 @@ label{font-size:12px;color:var(--dim)}
   <p class="hint">Safe mode: hold a knob while switching on, or use the button above. Power off: hold the power button 3 s, then let go. The last session's log is saved as cal_log_prev.txt on the card.</p>
  </section>
  <section class="card wide">
+  <h2>Face</h2>
+  <div class="row" id="faceBtns"></div>
+  <div class="row" style="margin-top:10px">
+   <label style="font:12px var(--mono);color:var(--dim)"><input type="checkbox" id="faceAuto" checked> Speaking while sound plays</label>
+  </div>
+  <div class="vol" style="margin-top:12px"><span>Tilt <span id="accV" style="color:var(--dim)"></span></span><span id="tiltV">–</span></div>
+  <div style="position:relative;height:14px;max-width:440px;background:#10110e;border:1px solid var(--line);border-radius:7px">
+   <div id="tiltB" style="position:absolute;top:2px;width:22px;height:8px;border-radius:4px;background:var(--green);left:calc(50% - 11px)"></div>
+   <div style="position:absolute;left:50%;top:0;bottom:0;border-left:1px solid var(--line)"></div>
+  </div>
+  <div class="row" style="margin-top:12px">
+   <button class="small" id="calLevel">1. Level</button>
+   <button class="small" id="calRight">2. Right side down</button>
+   <span id="calMsg" style="font:12px var(--mono);color:var(--dim)"></span>
+  </div>
+  <p class="hint">The bubbles move like a real level: tip the Yoto and they drift to the high side. To calibrate, sit it level as usual and press 1, then tip it so the right side (as you face the display) goes down about 20° and press 2. Saved as face.txt on the SD card. Drawing on the display below pauses the face until you pick a state again.</p>
+ </section>
+ <section class="card wide">
   <h2>Display</h2>
   <div class="row">
    <input type="color" id="pc" value="#ffb340" style="width:44px;height:32px;padding:0;border:1px solid var(--line);border-radius:4px;background:none">
@@ -249,6 +267,25 @@ $('dDot').onclick=()=>disp('addr',dsel());$('dBlk').onclick=()=>disp('block',dse
 $('dRamp').onclick=()=>disp('ramp',dsel());
 $('db').oninput=e=>{$('dbV').textContent=e.target.value+'/64'};
 $('db').onchange=e=>post('/api/disp/bright?v='+e.target.value);
+// ---- face ----
+const FACES=['idle','listening','thinking','speaking','pleased','indignant','nostalgic','asleep'];
+let faceNow='';
+FACES.forEach(f=>{const b=document.createElement('button');b.className='small';b.textContent=f[0].toUpperCase()+f.slice(1);b.dataset.face=f;
+ b.onclick=()=>post('/api/face?state='+f).then(r=>r.json()).then(faceShow);$('faceBtns').appendChild(b)});
+$('faceAuto').onchange=e=>post('/api/face?auto='+(e.target.checked?1:0));
+function faceShow(f){
+ faceNow=f.manual?'':f.state;
+ document.querySelectorAll('[data-face]').forEach(b=>b.style.borderColor=b.dataset.face===faceNow?'var(--amber)':'');
+ $('faceAuto').checked=f.auto;
+ if(!f.accOk){$('tiltV').textContent='no accelerometer';return}
+ $('tiltV').textContent=(Math.asin(Math.max(-1,Math.min(1,f.tilt)))*57.3).toFixed(0)+'°'+(f.cal?'':' (not calibrated)');
+ $('accV').textContent='(x '+f.acc[0].toFixed(2)+' y '+f.acc[1].toFixed(2)+' z '+f.acc[2].toFixed(2)+' g)';
+ $('tiltB').style.left='calc('+(50-f.tilt*50).toFixed(1)+'% - 11px)';
+}
+const facePoll=()=>{if(!document.hidden)fetch('/api/face').then(r=>r.json()).then(faceShow).catch(()=>{})};
+setInterval(facePoll,500);facePoll();
+$('calLevel').onclick=async()=>{$('calMsg').textContent=await (await post('/api/face/cal?step=level')).text()};
+$('calRight').onclick=async()=>{$('calMsg').textContent=await (await post('/api/face/cal?step=right')).text()};
 // ---- drawing grid ----
 const frame=Array(256).fill('000000');const pcells=[];let painting=false,erase=false,sendT=null;
 const sendFrame=()=>{sendT=null;fetch('/api/frame',{method:'POST',body:frame.join('')})};

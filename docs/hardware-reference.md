@@ -221,17 +221,17 @@ AW2028H at 0x65, LED board on P303. Tested Nov 12. [Board], registers [Datasheet
 | 0x37 | 0–63 | Global brightness (16 used) |
 | 0x35 | 0x02, then 0x03 | Oscillator on, then display on |
 
-**Memory layout.** Write 0x80, a start address, then the data; each byte is one LED's brightness (0–63). The board doesn't follow the datasheet's "COM × 0x20 + ROW" layout. The LEDs sit in runs of 24 addresses (8 pixels × red, green, blue), one run every 28 addresses starting at 0x1C. The last 4 addresses of each 28 aren't connected, and 0x00–0x1B is dark.
+**Memory layout.** Write 0x80, a start address (0x00), then the data; each byte is one LED's brightness (0–63). The datasheet gives each COM line a 0x20 block with ROW0–27 at offsets 0x00–0x1B. On a sequential write the chip skips the four unused addresses, so in the data stream **each COM line is 28 bytes**: byte 28 × COM + ROW. Eight COM lines make 224 bytes. Each COM line drives 8 pixels × red, green, blue (24 bytes); the last 4 bytes of each 28 aren't connected.
 
 For pixel (*x*, *y*), *x* 0–15 left to right and *y* 0–15 top to bottom:
 
 ```
 chip = y / 4
-j    = (y % 4) * 2 + (x / 8)
-run  = (j == 0) ? 8 : j
-red  = 28 * run + (x % 8) * 3      // green = red + 1, blue = red + 2
+com  = (y % 4) * 2 + (x / 8)       // row 0 left half is COM0
+red  = 28 * com + (x % 8) * 3      // byte in the stream; green = red + 1, blue = red + 2
 ```
 
+- A write longer than 224 bytes wraps round to COM0. I first sent 252 bytes (the datasheet's 0x00–0xFB) and mapped by lighting one byte at a time, so COM0 showed up as bytes 224–251 and bytes 0–27 looked dark. Sending zeros in bytes 0–27 and the pixels in 224–251 made COM0 go dark for ~2 ms on every update, which flickered during animation. Send 224 bytes, or the same data in both places.
 - Filling all 252 addresses as if they were the datasheet layout gives a stair-step of red, blue, yellow and dark pixels: the unconnected bytes push everything out of line.
 - open-yoto drives this display on/off only; gray mode works and gives smooth fades.
 - The LEDs' safe maximum current and their colour balance are untested.

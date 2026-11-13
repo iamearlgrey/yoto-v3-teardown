@@ -262,8 +262,14 @@ void playWav(const char *path) {
       n++;
       pos += step;
     }
-    if (n) i2s.write((const uint8_t *)outBuf, n * 4);
+    if (n) {
+      int peak = 0;                                 // for the face's speaking mouth
+      for (int i = 0; i < n * 2; i++) { int v = abs(outBuf[i]); if (v > peak) peak = v; }
+      yoto::face::level = peak / 32768.0f;
+      i2s.write((const uint8_t *)outBuf, n * 4);
+    }
   }
+  yoto::face::level = 0;
   wavFile.close();
   log(stopRequest ? "Stopped.\n" : "Finished.\n");
   nowPlaying[0] = 0;
@@ -482,6 +488,7 @@ bool ensureAudio() {
     log("Waking from charging mode.\n");
     yoto::chargingMode = false;
     yoto::light::off(500);
+    yoto::face::set(yoto::face::IDLE);
     startAudio();
     return false;                    // the start-up sound is the response to this press
   }
@@ -659,6 +666,7 @@ String playerStatus() {
 // Plays /shutdown.wav to the end (up to 4 s) before the board switches off.
 void goodbye() {
   stopAudio();
+  yoto::face::set(yoto::face::ASLEEP);
   if (!playIfExists("/shutdown.wav")) return;
   for (int i = 0; i < 50 && !playing; i++) delay(10);     // wait for it to start
   for (int i = 0; i < 400 && playing; i++) delay(10);     // then to finish
@@ -686,14 +694,26 @@ void setup() {
   yoto::knobHook = onKnob;
   yoto::buttonHook = onButton;
   setupPlayerRoutes();
+  yoto::face::begin();
+  if (yoto::chargingMode) yoto::face::set(yoto::face::ASLEEP);
   if (!audioTried) return;            // charging mode: quiet until woken
   log("Player ready. Volume -%d dB. Left knob: volume, press to pause. Right knob: tracks, press to play/stop.\n",
       volumeDown);
   playIfExists("/ready.wav");         // the web page is reachable now
 }
 
+// With auto on, the face speaks while sound plays (a stand-in until CAL has a voice).
+void faceAuto() {
+  using namespace yoto::face;
+  if (!autoMode || manual || yoto::chargingMode) return;
+  bool sound = playing && !paused;
+  if (sound && state == IDLE) state = SPEAKING;
+  else if (!sound && state == SPEAKING) state = IDLE;
+}
+
 void loop() {
   yoto::loop();
   idleMuteCheck();
+  faceAuto();
   delay(2);
 }
