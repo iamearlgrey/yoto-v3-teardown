@@ -57,7 +57,30 @@ label{font-size:12px;color:var(--dim)}
   <div class="row"><button id="pause">Pause</button><button id="stop">Stop</button></div>
   <div class="vol"><span>Volume</span><span id="volV">−24 dB</span></div>
   <input type="range" id="vol" min="-48" max="0" step="6" value="-24">
+  <div class="vol"><span>Boost (Smart 2 is the default)</span>
+   <select id="boost" style="font:12px var(--mono);background:#10110e;color:var(--ink);border:1px solid var(--line);border-radius:4px;padding:3px 6px">
+    <option value="0">Off</option><option value="1">Always on</option><option value="5">Smart 1</option><option value="6">Smart 2</option><option value="2" id="boostFound">As found</option>
+   </select></div>
   <p class="hint">Plays 16-bit WAV files, mono or stereo, any sample rate. Left knob: volume, press to pause. Right knob: next/previous file in the folder (/music if there is one), press to play/stop.</p>
+ </section>
+ <section class="card" id="lightCard">
+  <h2>Night light</h2>
+  <div class="row">
+   <input type="color" id="lc" value="#ffb340" style="width:44px;height:32px;padding:0;border:1px solid var(--line);border-radius:4px;background:none">
+   <button id="lon" class="primary">Light</button>
+   <button id="loff">Off</button>
+   <button id="ltest">Channel test</button>
+  </div>
+  <div class="vol"><span>Brightness</span><span id="llV">128</span></div>
+  <input type="range" id="ll" min="8" max="255" step="1" value="128">
+  <details id="balBox" style="margin-top:12px"><summary style="cursor:pointer;color:var(--amber);font:12px var(--mono)">Colour balance</summary>
+   <p class="hint">Press White, then lower the strongest colour until white looks white (a white wall helps). Check with a yellow from the picker, then Save.</p>
+   <div class="vol"><span>Red</span><span id="brV">100%</span></div><input type="range" id="br" min="1" max="100" value="100">
+   <div class="vol"><span>Green</span><span id="bgV">33%</span></div><input type="range" id="bg" min="1" max="100" value="33">
+   <div class="vol"><span>Blue</span><span id="bbV">27%</span></div><input type="range" id="bb" min="1" max="100" value="27">
+   <div class="row" style="margin-top:10px"><button id="lwhite">White</button><button id="bsave" class="primary">Save balance</button></div>
+  </details>
+  <p class="hint">Status colours: amber breathing while starting, blue while setting up WiFi or updating, red in safe mode, slow green in charging mode. Channel test lights each of the chip's three outputs alone for 2 s; the log asks what colour each one is.</p>
  </section>
  <section class="card">
   <h2>Board</h2>
@@ -114,8 +137,13 @@ async function status(){
   h+=`<span>${s.ip}</span><span>up ${Math.floor(s.uptime/60)} min</span>`;
   $('stats').innerHTML=h;
   if(s.hotspot)$('wifiBox').open=true;
+  if(!s.light_ok)$('lightCard').style.opacity=.4;
+  else if(document.activeElement!==$('ll')){$('ll').value=s.light_level;$('llV').textContent=s.light_level}
+  if(s.balance&&!$('balBox').open)['br','bg','bb'].forEach((id,i)=>{$(id).value=s.balance[i];$(id+'V').textContent=s.balance[i]+'%'});
   if('playing' in s){$('now').textContent=s.charging_mode?'Charging mode: press a knob to wake':s.playing?(s.paused?'⏸ ':'▶ ')+s.playing:'Nothing playing';
    $('pause').textContent=s.paused?'Resume':'Pause';
+   if(s.boost_found>=0){$('boostFound').value=s.boost_found;$('boostFound').textContent='As found ('+s.boost_found+')'}
+   if(document.activeElement!==$('boost')&&s.boost>=0)$('boost').value=s.boost;
    if(document.activeElement!==$('vol')){$('vol').value=-s.volume_down;$('volV').textContent=(s.volume_down?'−':'')+s.volume_down+' dB'}}
   else $('playerCard').style.opacity=.4;
  }catch(e){$('stats').textContent='not responding'}
@@ -161,6 +189,18 @@ async function pollLog(){
 }
 $('stop').onclick=async()=>{await post('/api/stop');setTimeout(status,300)};
 $('pause').onclick=async()=>{await post('/api/pause');setTimeout(status,300)};
+$('boost').onchange=e=>post('/api/boost?mode='+e.target.value);
+const lightSet=()=>post('/api/light?color='+$('lc').value.slice(1)+'&level='+$('ll').value);
+$('lon').onclick=lightSet;
+$('lc').oninput=lightSet;
+$('loff').onclick=()=>post('/api/light/off');
+$('ltest').onclick=()=>post('/api/light/test');
+$('ll').oninput=e=>{$('llV').textContent=e.target.value};
+$('ll').onchange=lightSet;
+const balQ=()=>'/api/light/balance?r='+$('br').value+'&g='+$('bg').value+'&b='+$('bb').value;
+['br','bg','bb'].forEach(id=>{$(id).oninput=e=>{$(id+'V').textContent=e.target.value+'%';post(balQ())}});
+$('lwhite').onclick=()=>post('/api/light?color=ffffff&level='+$('ll').value);
+$('bsave').onclick=async()=>{const r=await post(balQ()+'&save=1');alert(await r.text())};
 $('vol').oninput=e=>{const v=-e.target.value;$('volV').textContent=(v?'−':'')+v+' dB'};
 $('vol').onchange=e=>post('/api/volume?down='+(-e.target.value));
 $('restart').onclick=()=>{if(confirm('Restart the Yoto?'))post('/api/restart')};

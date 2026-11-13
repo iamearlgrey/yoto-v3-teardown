@@ -57,6 +57,11 @@ struct Wav {
   uint32_t rate = 0, dataStart = 0, dataLen = 0;
 };
 
+int readBoostMode();          // defined further down, used when the amps start
+const int BOOST_DEFAULT = 6;  // smart boost 2
+int boostFound = -1;          // boost mode the amps started in
+int boostMode = -1;           // boost mode now
+
 I2SClass i2s;
 bool ampsOk = false;
 int volumeDown = 24;          // amp attenuation in dB, 0 = loudest
@@ -105,6 +110,14 @@ bool ampStart(uint8_t amp, uint16_t i2sctrl, const char *side) {
   int32_t id = read16(amp, 0x00);
   if (id != 0x1806) { log("Amp 0x%02X: chip ID 0x%04X, not an AW88194\n", amp, (unsigned)(id & 0xFFFF)); return false; }
   write16(amp, 0x05, i2sctrl);
+  // Boost mode (BSTCTRL2 0x61 bits 6:4): the amps power up in mode 2, which the
+  // datasheet lists as reserved and which hisses. Smart boost 2 (6) was the quietest
+  // by ear (Nov 12), ahead of mode 2 and force boost.
+  int32_t b = read16(amp, 0x61);
+  if (b >= 0) {
+    if (boostFound < 0) boostFound = (b >> 4) & 7;
+    write16(amp, 0x61, (uint16_t)((b & ~0x0070) | (BOOST_DEFAULT << 4)));
+  }
   int32_t s = read16(amp, 0x04);
   if (s < 0) return false;
   s |= (1 << 6);                      // I2S on
@@ -117,7 +130,9 @@ bool ampStart(uint8_t amp, uint16_t i2sctrl, const char *side) {
   if (!waitBit(amp, 8, 300)) { log("Amp 0x%02X: not switching\n", amp); return false; }
   int32_t p = read16(amp, 0x08);
   if (p >= 0) write16(amp, 0x08, (uint16_t)(p & ~1));   // unmute
-  log("Amp 0x%02X running (%s speaker)\n", amp, side);
+  log("Amp 0x%02X running (%s speaker). Boost settings: 0x60 %04X, 0x61 %04X, 0x62 %04X\n", amp, side,
+      (unsigned)(read16(amp, 0x60) & 0xFFFF), (unsigned)(read16(amp, 0x61) & 0xFFFF),
+      (unsigned)(read16(amp, 0x62) & 0xFFFF));
   return true;
 }
 
@@ -304,12 +319,71 @@ bool ampsMuted = false;
 uint32_t lastSoundMs = 0;
 const uint32_t IDLE_MUTE_MS = 1500;
 
-void setAmpsMuted(bool mute) {
+// One log line per amp: status (SYSST 0x01), control (SYSCTRL 0x04),
+// mute (PWMCTRL 0x08 bit 0) and volume (0x0F upper byte), plus any fault flags.
+void logAmps(const char *why) {
   for (uint8_t amp : {AMP_L, AMP_R}) {
-    int32_t p = read16(amp, 0x08);
-    if (p >= 0) write16(amp, 0x08, (uint16_t)(mute ? (p | 1) : (p & ~1)));
+    int32_t st = read16(amp, 0x01), ctl = read16(amp, 0x04), pwm = read16(amp, 0x08), vol = read16(amp, 0x0F);
+    String faults;
+    if (st >= 0) {
+      if (st & (1 << 14)) faults += " low-voltage";
+      if (st & (1 << 11)) faults += " boost-overcurrent";
+      if (st & (1 << 10)) faults += " boost-overvoltage";
+      if (st & (1 << 7))  faults += " clipping";
+      if (st & (1 << 6))  faults += " dsp-watchdog";
+      if (st & (1 << 5))  faults += " no-clock";
+      if (st & (1 << 3))  faults += " amp-overcurrent";
+      if (st & (1 << 1))  faults += " overheat";
+      if (!(st & 1))      faults += " pll-unlocked";
+    }
+    log("  amp 0x%02X %s: status %04X ctrl %04X mute %s vol %04X%s\n", amp, why,
+        (unsigned)(st & 0xFFFF), (unsigned)(ctl & 0xFFFF), pwm < 0 ? "?" : (pwm & 1 ? "on" : "off"),
+        (unsigned)(vol & 0xFFFF), faults.c_str());
+  }
+}
+
+// Sets one bit of a 16-bit amp register, checking it took (up to 3 tries).
+bool setAmpBit(uint8_t amp, uint8_t reg, int bit, bool on) {
+  for (int attempt = 0; attempt < 3; attempt++) {
+    int32_t v = read16(amp, reg);
+    if (v < 0) continue;
+    write16(amp, reg, (uint16_t)(on ? (v | (1 << bit)) : (v & ~(1 << bit))));
+    int32_t back = read16(amp, reg);
+    if (back >= 0 && (((back >> bit) & 1) == (on ? 1 : 0))) return true;
+  }
+  return false;
+}
+
+// Idle: mute (PWMCTRL 0x08 bit 0), then power the amplifier stage down
+// (SYSCTRL 0x04 bit 1, AMPPD). Powering down also stops the smart-boost converter,
+// whose switching noise is the static heard after a loud setting (Nov 12 log:
+// SYSST bit 13, smart boost, stayed set after the volume came back down).
+// Wake: power up, wait for the amp to report switching (SYSST bit 8), then unmute.
+void setAmpsMuted(bool mute) {
+  bool ok = true;
+  for (uint8_t amp : {AMP_L, AMP_R}) {
+    bool done;
+    if (mute) {
+      done = setAmpBit(amp, 0x08, 0, true) && setAmpBit(amp, 0x04, 1, true);
+    } else {
+      done = setAmpBit(amp, 0x04, 1, false);
+      uint32_t t0 = millis();
+      if (done && !waitBit(amp, 8, 100)) log("Amp 0x%02X slow to restart.\n", amp);
+      uint32_t took = millis() - t0;
+      done = done && setAmpBit(amp, 0x08, 0, false);
+      if (took > 20) log("Amp 0x%02X took %lu ms to wake.\n", amp, (unsigned long)took);
+    }
+    if (!done) {
+      ok = false;
+      log("Amp 0x%02X didn't %s.\n", amp, mute ? "go idle" : "wake");
+    }
   }
   ampsMuted = mute;
+  logAmps(mute ? "idle (powered down)" : "awake");
+  if (!ok) {                           // so the next check tries again, 1.5 s from now
+    ampsMuted = !mute;
+    lastSoundMs = millis();
+  }
 }
 
 void wakeAmps() {
@@ -317,7 +391,32 @@ void wakeAmps() {
   if (ampsMuted && ampsOk) setAmpsMuted(false);
 }
 
+// While muted, look at the amps every 3 s and log if their state changes
+// (a fault flag, or a mute that came undone), so the static can be traced.
+uint32_t lastAmpWatch = 0;
+int32_t lastWatched[2] = {-1, -1};
+
+void watchAmps() {
+  if (!ampsOk || !ampsMuted || millis() - lastAmpWatch < 3000) return;
+  lastAmpWatch = millis();
+  bool changed = false;
+  int i = 0;
+  for (uint8_t amp : {AMP_L, AMP_R}) {
+    int32_t st = read16(amp, 0x01), pwm = read16(amp, 0x08);
+    int32_t key = ((st & 0xFFFF) << 1) | (pwm & 1);
+    if (key != lastWatched[i]) changed = true;
+    lastWatched[i++] = key;
+    int32_t ctl = read16(amp, 0x04);
+    if ((pwm >= 0 && !(pwm & 1)) || (ctl >= 0 && !(ctl & 2))) {
+      log("Amp 0x%02X came out of idle on its own; idling again.\n", amp);
+      ampsMuted = false;
+    }
+  }
+  if (changed) logAmps("idle");
+}
+
 void idleMuteCheck() {
+  watchAmps();
   if (!ampsOk || ampsMuted) return;
   if (playing && !paused) { lastSoundMs = millis(); return; }
   if (tickRequest) return;
@@ -362,6 +461,7 @@ void startAudio() {
   bool r = ampStart(AMP_R, 0x0808, "right");
   ampsOk = l || r;
   setVolume(volumeDown);
+  boostMode = readBoostMode();
 
   playQueue = xQueueCreate(2, 160);
   xTaskCreatePinnedToCore(audioTask, "audio", 6144, nullptr, 3, nullptr, 1);
@@ -380,6 +480,7 @@ void earlyStart() {
 bool ensureAudio() {
   if (!audioTried) {
     log("Waking from charging mode.\n");
+    yoto::light::off(500);
     startAudio();
     return false;                    // the start-up sound is the response to this press
   }
@@ -451,7 +552,10 @@ void onKnob(int knob, int clicks) {
   if (knob == 0) {
     int before = volumeDown;
     setVolume(volumeDown - clicks * VOLUME_STEP_DB);
-    if (volumeDown != before) log("Volume -%d dB\n", volumeDown);
+    if (volumeDown != before) {
+      log("Volume -%d dB\n", volumeDown);
+      logAmps("after volume");
+    }
     if (!ensureAudio()) return;
     if (!playing) {                      // let you hear the new level
       wakeAmps();
@@ -462,16 +566,50 @@ void onKnob(int knob, int clicks) {
   }
 }
 
+// Pause powers the amps down straight away (no 1.5 s of hiss); resume wakes them first.
+void togglePause() {
+  if (!playing) return;
+  if (paused) {
+    wakeAmps();
+    paused = false;
+    log("Resumed.\n");
+  } else {
+    paused = true;
+    delay(15);                       // let the audio task finish its current chunk
+    if (!ampsMuted) setAmpsMuted(true);
+    log("Paused.\n");
+  }
+}
+
+// ---------- Boost mode (AW88194 BSTCTRL2 0x61, bits 6:4) ----------
+// Datasheet: 0 = transparent (boost off), 1 = force boost, 5 = smart boost 1,
+// 6 = smart boost 2. The amps start in mode 2, which the datasheet lists as reserved;
+// Yoto's firmware presumably sets this, ours didn't. Changed from the web page to compare.
+
+int readBoostMode() {
+  int32_t v = read16(AMP_L, 0x61);
+  return v < 0 ? -1 : (int)((v >> 4) & 7);
+}
+
+void setBoostMode(int mode) {
+  if (!ampsOk) return;
+  if (!ampsMuted) setAmpsMuted(true);   // change it while the amps are powered down
+  for (uint8_t amp : {AMP_L, AMP_R}) {
+    int32_t v = read16(amp, 0x61);
+    if (v >= 0) write16(amp, 0x61, (uint16_t)((v & ~0x0070) | ((mode & 7) << 4)));
+  }
+  boostMode = readBoostMode();
+  log("Boost mode set to %d (%s)\n", boostMode,
+      boostMode == 0 ? "off" : boostMode == 1 ? "always on" : boostMode == 5 ? "smart 1" :
+      boostMode == 6 ? "smart 2" : "as found");
+}
+
 void onButton(int button, bool pressed) {
   if (!pressed) return;
   if (button == 2) { ensureAudio(); return; }   // power button: only wakes from charging mode
   if (!ensureAudio()) return;
   if (button == 0) {
-    if (playing) {
-      if (paused) wakeAmps();
-      paused = !paused;
-      log(paused ? "Paused.\n" : "Resumed.\n");
-    }
+    togglePause();
   } else {
     if (playing) stopAudio();
     else if (lastPath[0]) playTrack(String(lastPath));
@@ -494,10 +632,13 @@ void setupPlayerRoutes() {
     server.send(200, "text/plain", "OK");
   });
   server.on("/api/pause", HTTP_POST, []() {
-    if (playing) {
-      if (paused) wakeAmps();
-      paused = !paused;
-    }
+    togglePause();
+    server.send(200, "text/plain", "OK");
+  });
+  server.on("/api/boost", HTTP_POST, []() {
+    int m = server.arg("mode").toInt();
+    if (m != 0 && m != 1 && m != 5 && m != 6 && m != boostFound) { server.send(400, "text/plain", "Bad mode"); return; }
+    setBoostMode(m);
     server.send(200, "text/plain", "OK");
   });
   server.on("/api/volume", HTTP_POST, []() {
@@ -510,7 +651,8 @@ void setupPlayerRoutes() {
 String playerStatus() {
   return "\"playing\":\"" + yoto::jsonEscape(String(nowPlaying)) + "\",\"paused\":" + String(paused ? "true" : "false") +
          ",\"volume_down\":" + String(volumeDown) + ",\"amps\":" + String(ampsOk ? "true" : "false") +
-         ",\"charging_mode\":" + String(!audioTried ? "true" : "false");
+         ",\"charging_mode\":" + String(!audioTried ? "true" : "false") +
+         ",\"boost\":" + String(boostMode) + ",\"boost_found\":" + String(boostFound);
 }
 
 // Plays /shutdown.wav to the end (up to 4 s) before the board switches off.

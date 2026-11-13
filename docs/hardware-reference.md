@@ -54,7 +54,7 @@ SDA GPIO21, SCL GPIO25. [Config]
 | 0x51 | IT8563 / PCF8563-type | Real-time clock | Scan, [Config], [Board]. Seconds register counts. No backup cell: the "lost power" flag is set and the time resets at every power-up |
 | 0x62 | CW2015 (U105) | Battery fuel gauge | Scan, [Board]. Asleep at power-up (mode register 0x0A = 0xC0). Writing 0x00 to 0x0A wakes it, and the cell voltage then reads correctly |
 | 0x64 | Nothing | | Never answered, on USB-C or battery. The V3-E config's CW2215B isn't fitted |
-| 0x65 | AW2028H, very likely (U301) | Night light LED driver | Scan, [Board], Awinic lists its address as 65H. Register 0x00 reads 0xB1 |
+| 0x65 | AW2028H (U301) | Night light LED driver | Scan, [Board]. Register 0x00 reads 0xB1, the AW2028H's chip ID, and the night light works with the datasheet registers |
 | 0x75 | Unknown | | Scan. About nine registers (0x09 onward read 0xFF), static, same on USB-C and battery |
 
 0x08 answers only when USB-C is plugged in, since the HUSB238 is powered from the cable. Everything else answers on battery alone. [Board]
@@ -162,6 +162,41 @@ Tested on battery, Nov 12. [Board]
 
 Which of the newly released outputs was keeping the board on is untested. [Inferred]
 
+## Speaker amps: boost and idle
+
+Tested Nov 12. [Board], register meanings [Datasheet]
+
+| Register | At power-up | Notes |
+| --- | --- | --- |
+| 0x60 | 0x0402 | Boost control, not changed |
+| 0x61 BSTCTRL2 | 0x0126 | Bits 6:4 BST_MODE = 2, listed as reserved. Documented: 0 transparent, 1 force boost, 5 smart boost 1, 6 smart boost 2 |
+| 0x62 BSTVOUT | 0x2E38 | Bits 3:0 maximum boost voltage, not changed |
+
+- In mode 2 and in force boost, the speakers hiss in quiet passages. Smart boost 2 was the quietest by ear, so the close-up firmware writes it before switching each amp on. Off (transparent) and smart boost 1 weren't compared.
+- From about −9 dB, SYSST bit 13 (smart boost status) sets and stays set after the volume comes back down. HMUTE (PWMCTRL 0x08 bit 0) doesn't silence the hiss then; one amp even flagged clipping (SYSST bits 7 and 2) while muted.
+- Powering the amplifier stage down (SYSCTRL 0x04 bit 1, AMPPD) when idle removes it. To wake: clear AMPPD, wait for SYSST bit 8 (switching), then clear HMUTE. This takes a few milliseconds and doesn't clip the start of a sound.
+
+Yoto's firmware loads DSP firmware and tuning into the amps, and probably sets the boost mode too. None of this is needed for clean audio at desk volumes.
+
+## Night light
+
+AW2028H at 0x65, LED board on P303. Tested Nov 12. [Board], registers [Datasheet]
+
+| Register | Value used | Meaning |
+| --- | --- | --- |
+| 0x00 | 0x55 to reset; reads 0xB1 | Reset / chip ID |
+| 0x01 GCR | 0x01 | Chip enable |
+| 0x03 IMAX | 0x01 | 18 mA maximum per channel (chip default). Options: 9, 18, 37, 75 mA. The LED ratings are unknown, so I stayed at the default |
+| 0x04–0x06 LCFG1–3 | 0x00 | Manual mode (no hardware patterns) |
+| 0x07 LEDEN | 0x07 | All three outputs on |
+| 0x08 LEDCTR | 0x03 | Independent channels, linear dimming |
+| 0x10–0x12 ILED1–3 | Brightness | Current, as a fraction of IMAX |
+| 0x1C–0x1E PWM1–3 | Colour | Duty cycle per channel |
+
+- LED1 is red, LED2 green, LED3 blue. No extra enable pin is needed.
+- The LEDs lean green: yellow comes out lime. By eye against a white wall, white needed red 100 %, green 33 %, blue 27 %, with a 2.2 gamma curve. Your LEDs may differ.
+- Yoto's firmware drives it in sync RGB mode instead (open-yoto's notes: "SYNC RGB mode, setting PWM1 to max (0xFF) and ILED1/2/3" for colour).
+
 ## Storage
 
 **microSD** (GPIO2/14/15), about 171 MB used on my card. It holds cached card audio in randomly named folders, plus card data, icons, app settings, and a resume record. Settings include schedules, brightness, volume caps, and a 1-hour auto shutdown.
@@ -216,7 +251,7 @@ The V3-E config lists a different battery (EVE-LJDX90X-4900) than the fitted A&S
 | U300 | | microSD socket | Storage | Confirmed |
 | D300 | | Light sensor, part unidentified | Ambient light sensor on GPIO36, seen through an opening in the LED frame, with R307, R308 and C306 beside it | Confirmed by continuity |
 | U302 | 4D5, with data matrix | LIS2DH12 | Accelerometer (0x18), next to TP40. About 2 mm square, package matches the datasheet, pin 1 connects to SCL | Confirmed by WHO_AM_I |
-| U301 | 28H DB | AW2028H, very likely | Night light LED driver (0x65), on the main board below the 6-pin connector. 8 pins: 3 on two sides, 1 on the others | Very likely |
+| U301 | 28H DB | AW2028H | Night light LED driver (0x65), on the main board below the 6-pin connector. 8 pins: 3 on two sides, 1 on the others | Confirmed by chip ID and in firmware |
 | Night light strip | Not removed | Glued in place | Rear LED strip around the back of the sound module. The driver is on the main board | Observed |
 | Qi board | Not removed, glued and screwed in place | CV8013N, likely | Wireless charging receiver on the bottom of the sound chamber, with a ring of magnets around the coil | Inferred |
 | U105 | 2015CH BDLR23 | CW2015CHBD | Battery fuel gauge (0x62), on the opposite side of the board near the battery connector | Confirmed in firmware |

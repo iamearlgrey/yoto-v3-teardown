@@ -52,6 +52,7 @@ String (*statusHook)() = nullptr;  // set by the app; returns extra JSON fields,
 
 uint32_t bootMs = 0;
 uint32_t readyMs = 0;              // when begin() finished (WiFi can take a while)
+uint32_t readyGlowEnd = 0;         // when to fade out the "ready" glow
 float batteryVolts = 0;
 String inputState = "?";
 String chargeState = "?";
@@ -107,6 +108,12 @@ bool setupExpanders() {
   ok &= write8(IOX_B, 0x07, 0xD4);
   return ok;
 }
+
+}  // namespace yoto
+
+#include "yoto_light.h"               // night light ring: status colours
+
+namespace yoto {
 
 // ---------- Helpers ----------
 String jsonEscape(const String &s) {
@@ -216,11 +223,15 @@ void powerOff() {
     log("USB-C is connected, so the board stays powered. Unplug USB-C, then hold the power button again.\n");
     return;
   }
+  light::amber(150);                // glow, then fade out with the shutdown sound
+  delay(160);
+  light::off(1600);
   if (goodbyeHook) goodbyeHook();   // the shutdown sound: your cue to let go
   stopApp();
   if (shutdownHook) shutdownHook();
   for (int i = 0; i < 100 && powerButtonDown(); i++) delay(100);   // up to 10 s for release
   log("Switching off.\n");
+  light::blackout();
   saveLog(true);
   delay(100);
   write8(IOX_A, 0x06, 0xFF);        // port0 all inputs
@@ -428,6 +439,7 @@ void startHotspot(const String &wanted = "") {
   scanNetworks(wanted);
   WiFi.softAP(AP_NAME);
   apMode = true;
+  if (!safeMode) light::hotspotGlow();   // blue breathing: waiting for WiFi setup
   log("Setup hotspot \"%s\" started. Join it, then open http://192.168.4.1\n", AP_NAME);
 }
 
@@ -477,11 +489,15 @@ void setupOta() {
   ArduinoOTA.setHostname(HOSTNAME);
   if (otaPass.length()) ArduinoOTA.setPassword(otaPass.c_str());
   ArduinoOTA.onStart([]() {
+    light::updateGlow();             // quick blue pulse while the update arrives
     stopApp();
     log("Wireless update starting...\n");
   });
   ArduinoOTA.onEnd([]() { log("Update received. Restarting.\n"); });
-  ArduinoOTA.onError([](ota_error_t e) { log("Update failed (error %u).\n", (unsigned)e); });
+  ArduinoOTA.onError([](ota_error_t e) {
+    log("Update failed (error %u).\n", (unsigned)e);
+    light::off();
+  });
   ArduinoOTA.begin();               // also starts mDNS as cal-yoto.local
   MDNS.addService("http", "tcp", 80);
   log("Wireless updates ready: in Arduino IDE pick the network port \"%s\".\n", HOSTNAME);
@@ -626,6 +642,11 @@ void handleStatus() {
   out += ",\"charge\":\"" + chargeState + "\"";
   out += ",\"uptime\":" + String(millis() / 1000);
   out += ",\"heap\":" + String(ESP.getFreeHeap());
+  out += ",\"light_ok\":" + String(light::ok ? "true" : "false");
+  out += ",\"light\":\"" + light::hex() + "\"";
+  out += ",\"light_level\":" + String(light::level);
+  out += ",\"balance\":[" + String(light::balance[0]) + "," + String(light::balance[1]) + "," +
+         String(light::balance[2]) + "]";
   if (statusHook) {
     String extra = statusHook();
     if (extra.length()) out += "," + extra;
@@ -691,6 +712,28 @@ void setupRoutes() {
     delay(200);
     powerOff();
   });
+  server.on("/api/light", HTTP_POST, []() {
+    if (!light::ok) { server.send(503, "text/plain", "Night light not found; see the log"); return; }
+    if (server.hasArg("level")) light::setBrightness((uint8_t)constrain(server.arg("level").toInt(), 1, 255));
+    String c = server.arg("color");
+    if (c.startsWith("#")) c.remove(0, 1);
+    if (c.length() == 6) {
+      long v = strtol(c.c_str(), nullptr, 16);
+      light::set((v >> 16) & 255, (v >> 8) & 255, v & 255, 300);
+    }
+    server.send(200, "text/plain", "OK");
+  });
+  server.on("/api/light/off", HTTP_POST, []() { light::off(); server.send(200, "text/plain", "OK"); });
+  server.on("/api/light/balance", HTTP_POST, []() {
+    light::setBalance(server.arg("r").toInt(), server.arg("g").toInt(), server.arg("b").toInt());
+    if (server.hasArg("save")) {
+      bool ok = sdOk && light::saveSettings();
+      server.send(ok ? 200 : 500, "text/plain", ok ? "Saved" : "Couldn't save /light.txt");
+      return;
+    }
+    server.send(200, "text/plain", "OK");
+  });
+  server.on("/api/light/test", HTTP_POST, []() { light::channelTest(); server.send(200, "text/plain", "OK"); });
   server.onNotFound([]() { server.send(404, "text/plain", "Not found"); });
 }
 
@@ -706,6 +749,7 @@ bool begin() {
   log("\n=== CAL Yoto (boot %lu ms) ===\n", millis());
   log("Last restart: %s\n", resetReasonText());
   log("Expanders: %s\n", ioxOk ? "OK" : "WRITE FAILED");
+  if (light::begin()) light::startupGlow();   // amber breathing while starting
 
   // Safe mode: requested before a restart, or a knob held right at power-up.
   // (A knob held for 1 s in the first 6 s also works; see pollInputs.) Pressed reads 0.
@@ -719,6 +763,7 @@ bool begin() {
   sdOk = SD_MMC.begin("/sdcard", true);
   log("SD card: %s\n", sdOk ? "OK" : "not found");
   rotateLog();
+  if (sdOk && light::ok) light::loadSettings();
 
   write8(GAUGE, 0x0A, 0x00);         // wake the fuel gauge; its first reading takes a moment,
   for (int i = 0; i < 25 && !safeMode; i++) {   // so use that time to keep watching the knobs
@@ -735,6 +780,8 @@ bool begin() {
 
   wokeByUsb = esp_reset_reason() == ESP_RST_POWERON && usbPresent() && !powerButtonDown();
   if (wokeByUsb) log("Switched on by USB-C.\n");
+  if (safeMode) light::safeModeGlow();       // red breathing for as long as safe mode lasts
+  else if (wokeByUsb) light::chargingGlow(); // slow green breathing until woken
   setupKnobs();
 
   if (!safeMode && earlyHook) earlyHook();   // e.g. start audio and play the startup sound
@@ -743,6 +790,10 @@ bool begin() {
   setupRoutes();
   server.begin();
   readyMs = millis();
+  if (!safeMode && !apMode && !wokeByUsb) {   // ready: steady glow, then fade out
+    light::amber(200);
+    readyGlowEnd = millis() + 1200;
+  }
   return safeMode;
 }
 
@@ -753,6 +804,10 @@ void loop() {
   pollKnobs();
   pollBattery();
   saveLog();
+  if (readyGlowEnd && millis() > readyGlowEnd) {
+    readyGlowEnd = 0;
+    light::off(1500);
+  }
 }
 
 }  // namespace yoto

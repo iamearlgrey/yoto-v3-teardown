@@ -15,7 +15,7 @@ Teardown notes for the full-size Yoto Player 3rd generation, plus Arduino sketch
 
 | Path | What it is |
 | --- | --- |
-| [`firmware/yoto_v3_closeup/`](firmware/yoto_v3_closeup/) | **Start here.** Stereo WAV player with both knobs, WiFi updates, a web page (log, SD files, battery), safe mode, power off, and start-up and shutdown sounds. `yoto_base.h` is reusable for your own sketches |
+| [`firmware/yoto_v3_closeup/`](firmware/yoto_v3_closeup/) | **Start here.** Stereo WAV player with both knobs, the night light (status colours and colour picker), WiFi updates, a web page (log, SD files, battery), safe mode, power off, and start-up and shutdown sounds. `yoto_base.h` and `yoto_light.h` are reusable for your own sketches |
 | [`firmware/yoto_v3_amp_test/`](firmware/yoto_v3_amp_test/) | Arduino sketch that wakes both amps and beeps |
 | [`firmware/yoto_v3_stereo/`](firmware/yoto_v3_stereo/) | True stereo: each amp plays its own channel, with a left-to-right sweep |
 | [`firmware/yoto_v3_left_right/`](firmware/yoto_v3_left_right/) | Beeps each amp alone, to tell left from right |
@@ -85,7 +85,8 @@ The first stereo version stuttered during the sweep: computing double-precision 
 | Power off on battery | Releasing the power hold (IOX.3.1) alone didn't cut power. It works when the other expander pins are made inputs first, as Yoto's firmware does |
 | USB-C while off | Plugging in switches the player on, and it charges while running |
 | Knobs | Both work, decoded from pin-change interrupts at 4 counts per click: left on GPIO26/13, right on GPIO27/4 |
-| Static between files | With no audio playing, the amps (running without Yoto's DSP setup) hiss audibly. Muting them (PWMCTRL 0x08 bit 0) 1.5 s after the last sound, and unmuting just before the next, removes it with no clipped starts |
+| Static | The amps hiss when idle and in quiet passages. Two causes, two fixes. **Boost mode:** the amps power up with their boost converter in mode 2 (BSTCTRL2 0x61 bits 6:4), which the datasheet lists as reserved. Of the documented modes, smart boost 2 (6) was quietest by ear; mode 2 and force boost hissed. **Idle:** muting alone (PWMCTRL 0x08 bit 0) doesn't stop the boost, so once it had kicked in at about −9 dB the static stayed. Powering the amplifier stage down (SYSCTRL 0x04 bit 1) 1.5 s after the last sound, and waiting for it to report switching before unmuting, removes it with no clipped starts |
+| Night light | AW2028H at 0x65 confirmed (ID 0xB1). LED1 red, LED2 green, LED3 blue. Bare RGB LEDs lean green: by eye, white needed red 100 %, green 33 %, blue 27 % |
 
 Details in [`docs/hardware-reference.md`](docs/hardware-reference.md).
 
@@ -110,6 +111,7 @@ Back up first: see [`docs/download-mode.md`](docs/download-mode.md). The sketche
 | Play / stop | Press the right knob |
 | Power off | Hold the power button 3 s, wait for the shutdown sound, let go. Only on battery: with USB-C in, the board stays powered |
 | Charging mode | If plugging in USB-C switched it on, the amps and sounds stay off until you press a knob or the power button (not yet tested) |
+| Night light | Colour picker, brightness and colour balance on the web page. Status colours: amber breathing while starting, blue while setting up WiFi or updating, red in safe mode, slow green in charging mode, amber fade at power off |
 | See what happened last time | `cal_log_prev.txt` on the SD card, and the "Last restart" line at the top of the log |
 
 Every sketch built on `yoto_base.h` keeps WiFi updates and safe mode, so the case can stay closed.
